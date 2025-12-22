@@ -1,0 +1,43 @@
+{
+  "name": "klen-linkedin-extension",
+  "displayName": "Klen LinkedIn Extension",
+  "version": "1.0.0",
+  "description": "Import LinkedIn profiles as candidates into Klen recruiting platform",
+  "author": "Klen AI",
+  "scripts": {
+    "dev": "plasmo dev",
+    "build": "plasmo build",
+    "package": "plasmo package",
+    "lint": "eslint src --ext .ts,.tsx",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@plasmohq/messaging": "^0.6.2",
+    "@plasmohq/storage": "^1.12.0",
+    "plasmo": "^0.89.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.280",
+    "@types/node": "^22.10.2",
+    "@types/react": "^18.3.14",
+    "@types/react-dom": "^18.3.4",
+    "eslint": "^9.17.0",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2"
+  },
+  "manifest": {
+    "host_permissions": [
+      "https://www.linkedin.com/*",
+      "https://linkedin.com/*",
+      "https://api.klen.ai/*",
+      "http://localhost:8000/*"
+    ],
+    "permissions": [
+      "storage",
+      "activeTab",
+      "scripting"
+    ]
+  }
+}
