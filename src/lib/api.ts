@@ -34,6 +34,17 @@ export class ApiError extends Error {
   }
 }
 
+function truncateBodyForError(body: string, maxLength = 300): string {
+  const trimmed = body.trim()
+  if (!trimmed) {
+    return ""
+  }
+  if (trimmed.length <= maxLength) {
+    return trimmed
+  }
+  return `${trimmed.slice(0, maxLength)}…`
+}
+
 /**
  * Make an authenticated API request
  */
@@ -45,14 +56,25 @@ async function apiFetch<T>(
   const tokens = await getAuthTokens()
 
   const url = `${baseUrl}${endpoint}`
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
-    ...options.headers
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json"
+  }
+
+  if (options.headers instanceof Headers) {
+    options.headers.forEach((value, key) => {
+      headers[key] = value
+    })
+  } else if (Array.isArray(options.headers)) {
+    for (const [key, value] of options.headers) {
+      headers[key] = value
+    }
+  } else if (options.headers) {
+    Object.assign(headers, options.headers)
   }
 
   // Add auth header if we have tokens
   if (tokens?.access_token) {
-    headers["Authorization"] = `Bearer ${tokens.access_token}`
+    headers.Authorization = `Bearer ${tokens.access_token}`
   }
 
   try {
@@ -66,7 +88,7 @@ async function apiFetch<T>(
       const refreshed = await refreshAccessToken(tokens.refresh_token)
       if (refreshed) {
         // Retry the request with new token
-        headers["Authorization"] = `Bearer ${refreshed.access_token}`
+        headers.Authorization = `Bearer ${refreshed.access_token}`
         const retryResponse = await fetch(url, {
           ...options,
           headers
@@ -143,7 +165,48 @@ async function refreshAccessToken(refreshToken: string): Promise<AuthTokens | nu
       return null
     }
 
-    const tokens: AuthTokens = await response.json()
+    const text = await response.text()
+    let tokenResponse: {
+      access_token?: string
+      refresh_token?: string
+      token_type?: string
+      expires_in?: number
+    }
+
+    try {
+      tokenResponse = JSON.parse(text) as {
+        access_token?: string
+        refresh_token?: string
+        token_type?: string
+        expires_in?: number
+      }
+    } catch (error) {
+      console.error("[Klen] Token refresh returned invalid JSON:", {
+        status: response.status,
+        contentType: response.headers.get("content-type"),
+        snippet: truncateBodyForError(text)
+      })
+      return null
+    }
+
+    if (!tokenResponse?.access_token) {
+      console.error("[Klen] Token refresh returned unexpected payload:", {
+        status: response.status,
+        contentType: response.headers.get("content-type"),
+        snippet: truncateBodyForError(text)
+      })
+      return null
+    }
+
+    const tokens: AuthTokens = {
+      access_token: tokenResponse.access_token,
+      refresh_token: tokenResponse.refresh_token,
+      token_type: tokenResponse.token_type || "bearer",
+      expires_at: tokenResponse.expires_in
+        ? Date.now() + Math.max(0, tokenResponse.expires_in - 30) * 1000
+        : undefined
+    }
+
     await setAuthTokens(tokens)
     return tokens
   } catch (error) {
@@ -174,18 +237,54 @@ export async function login(
     body: JSON.stringify({ email, password })
   })
 
+  const text = await response.text()
+  const contentType = response.headers.get("content-type") || "unknown"
+
+  let parsed: unknown = null
+  try {
+    parsed = text ? JSON.parse(text) : null
+  } catch {
+    parsed = null
+  }
+
   if (!response.ok) {
     let errorMessage = "Login failed"
     try {
-      const errorData = await response.json()
-      errorMessage = errorData.detail || errorData.message || errorMessage
+      const errorData = parsed as { detail?: string; message?: string } | null
+      errorMessage = errorData?.detail || errorData?.message || errorMessage
     } catch {
       // Ignore
+    }
+
+    if (!parsed && text) {
+      errorMessage = `${errorMessage} (non-JSON response: ${contentType}). Body: ${truncateBodyForError(
+        text
+      )}`
     }
     throw new ApiError(errorMessage, response.status, "LOGIN_FAILED")
   }
 
-  const data: LoginResponse = await response.json()
+  if (!parsed) {
+    throw new ApiError(
+      `Login failed: server returned non-JSON response (${contentType}). Body: ${truncateBodyForError(
+        text
+      )}`,
+      response.status,
+      "INVALID_RESPONSE"
+    )
+  }
+
+  const data = parsed as LoginResponse
+  if (!data?.access_token || typeof data.expires_in !== "number") {
+    throw new ApiError(
+      `Login failed: server returned unexpected payload (${contentType}). Body: ${truncateBodyForError(
+        text
+      )}`,
+      response.status,
+      "INVALID_RESPONSE"
+    )
+  }
+
   return data
 }
 

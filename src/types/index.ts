@@ -32,10 +32,15 @@ export interface Job {
 }
 
 export interface JobListResponse {
-  items: Job[]
+  // Backend returns `jobs`; older clients may use `items`.
+  jobs?: Job[]
+  items?: Job[]
   total: number
   page: number
-  page_size: number
+  size?: number
+  page_size?: number
+  pages?: number
+  stats?: Record<string, unknown>
 }
 
 // ============================================================================
@@ -135,6 +140,7 @@ export type MessageType =
   | "LOGIN"
   | "LOGOUT"
   | "GET_AUTH_STATUS"
+  | "OPEN_POPUP"
   | "GET_JOBS"
   | "SELECT_JOB"
   | "IMPORT_LINKEDIN_PROFILE"
@@ -163,6 +169,7 @@ export interface LoginResponse {
   access_token: string
   refresh_token?: string
   token_type: string
+  expires_in: number
   user: UserInfo
 }
 

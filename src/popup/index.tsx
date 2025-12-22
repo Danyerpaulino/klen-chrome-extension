@@ -19,9 +19,22 @@ async function sendMessage<T>(
 ): Promise<MessageResponse<T>> {
   return new Promise((resolve) => {
     chrome.runtime.sendMessage({ type, payload }, (response) => {
+      if (chrome.runtime.lastError) {
+        resolve({ success: false, error: chrome.runtime.lastError.message })
+        return
+      }
+
       resolve(response || { success: false, error: "No response" })
     })
   })
+}
+
+function formatErrorMessage(message: string): string {
+  const trimmed = message.trim()
+  if (trimmed.length <= 600) {
+    return trimmed
+  }
+  return `${trimmed.slice(0, 600)}… (truncated)`
 }
 
 function Popup() {
@@ -57,6 +70,7 @@ function Popup() {
         isAuthenticated: boolean
         user?: UserInfo
         selectedJobId?: string
+        apiBaseUrl?: string
       }>("GET_AUTH_STATUS")
 
       if (response.success && response.data) {
@@ -64,6 +78,9 @@ function Popup() {
         setUser(response.data.user || null)
         if (response.data.selectedJobId) {
           setSelectedJobId(response.data.selectedJobId)
+        }
+        if (response.data.apiBaseUrl) {
+          setApiUrl(response.data.apiBaseUrl)
         }
 
         // Load jobs if authenticated
@@ -77,9 +94,9 @@ function Popup() {
   }, [])
 
   const loadJobs = async (search?: string) => {
-    const response = await sendMessage<{ jobs: Job[] }>("GET_JOBS", { search })
+    const response = await sendMessage<{ jobs?: Job[] }>("GET_JOBS", { search })
     if (response.success && response.data) {
-      setJobs(response.data.jobs)
+      setJobs(Array.isArray(response.data.jobs) ? response.data.jobs : [])
     }
   }
 
@@ -101,10 +118,14 @@ function Popup() {
         setPassword("") // Clear password
         await loadJobs()
       } else {
-        setError(response.error || "Login failed")
+        setError(
+          formatErrorMessage(response.error || "Login failed")
+        )
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed")
+      setError(
+        formatErrorMessage(err instanceof Error ? err.message : "Login failed")
+      )
     } finally {
       setIsLoading(false)
     }
@@ -318,8 +339,8 @@ function Popup() {
       {/* Instructions */}
       <div className="instructions">
         <p>
-          Visit a LinkedIn profile and click the Klen button to add them as a
-          candidate.
+          On LinkedIn profiles, click the purple Klen button in the bottom-right
+          to open the panel, then “Add as Candidate”.
         </p>
       </div>
     </div>

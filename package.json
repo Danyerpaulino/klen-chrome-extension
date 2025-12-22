@@ -4,6 +4,9 @@
   "version": "1.0.0",
   "description": "Import LinkedIn profiles as candidates into Klen recruiting platform",
   "author": "Klen AI",
+  "optionalDependencies": {
+    "@parcel/watcher": "*"
+  },
   "scripts": {
     "dev": "plasmo dev",
     "build": "plasmo build",

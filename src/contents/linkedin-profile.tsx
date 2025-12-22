@@ -6,7 +6,7 @@
  */
 
 import type { PlasmoCSConfig, PlasmoGetStyle } from "plasmo"
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useRef } from "react"
 import {
   extractLinkedInProfile,
   isLinkedInProfilePage,
@@ -38,7 +38,7 @@ export const getStyle: PlasmoGetStyle = () => {
       border-radius: 12px;
       box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-      z-index: 9999;
+      z-index: 2147483647;
       overflow: hidden;
     }
 
@@ -225,7 +225,7 @@ export const getStyle: PlasmoGetStyle = () => {
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 9998;
+      z-index: 2147483646;
       transition: transform 0.2s;
     }
 
@@ -268,6 +268,11 @@ async function sendMessage<T>(
 ): Promise<MessageResponse<T>> {
   return new Promise((resolve) => {
     chrome.runtime.sendMessage({ type, payload }, (response) => {
+      if (chrome.runtime.lastError) {
+        resolve({ success: false, error: chrome.runtime.lastError.message })
+        return
+      }
+
       resolve(response || { success: false, error: "No response" })
     })
   })
@@ -276,6 +281,7 @@ async function sendMessage<T>(
 // Main content component
 function LinkedInProfilePanel() {
   const [isOpen, setIsOpen] = useState(false)
+  const hasAutoOpenedRef = useRef(false)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [jobs, setJobs] = useState<Job[]>([])
   const [selectedJobId, setSelectedJobId] = useState<string>("")
@@ -293,10 +299,48 @@ function LinkedInProfilePanel() {
     imageUrl?: string
   } | null>(null)
 
+  const loadJobs = useCallback(async () => {
+    const response = await sendMessage<{ jobs: Job[] }>("GET_JOBS")
+    if (response.success && response.data) {
+      setJobs(Array.isArray(response.data.jobs) ? response.data.jobs : [])
+    }
+  }, [])
+
+  const checkAuthStatus = useCallback(async () => {
+    const response = await sendMessage<{
+      isAuthenticated: boolean
+      selectedJobId?: string
+    }>("GET_AUTH_STATUS")
+
+    if (response.success && response.data) {
+      setIsAuthenticated(response.data.isAuthenticated)
+      if (response.data.selectedJobId) {
+        setSelectedJobId(response.data.selectedJobId)
+
+        if (!hasAutoOpenedRef.current) {
+          setIsOpen(true)
+          hasAutoOpenedRef.current = true
+        }
+      }
+
+      // Load jobs if authenticated
+      if (response.data.isAuthenticated) {
+        await loadJobs()
+      }
+    }
+  }, [loadJobs])
+
   // Check auth status on mount
   useEffect(() => {
     checkAuthStatus()
   }, [])
+
+  // Re-check auth status when opening (covers: logged in via popup after page load)
+  useEffect(() => {
+    if (isOpen) {
+      checkAuthStatus()
+    }
+  }, [isOpen, checkAuthStatus])
 
   // Extract profile when panel opens
   useEffect(() => {
@@ -309,32 +353,6 @@ function LinkedInProfilePanel() {
       })
     }
   }, [isOpen])
-
-  const checkAuthStatus = useCallback(async () => {
-    const response = await sendMessage<{
-      isAuthenticated: boolean
-      selectedJobId?: string
-    }>("GET_AUTH_STATUS")
-
-    if (response.success && response.data) {
-      setIsAuthenticated(response.data.isAuthenticated)
-      if (response.data.selectedJobId) {
-        setSelectedJobId(response.data.selectedJobId)
-      }
-
-      // Load jobs if authenticated
-      if (response.data.isAuthenticated) {
-        loadJobs()
-      }
-    }
-  }, [])
-
-  const loadJobs = async () => {
-    const response = await sendMessage<{ jobs: Job[] }>("GET_JOBS")
-    if (response.success && response.data) {
-      setJobs(response.data.jobs)
-    }
-  }
 
   const handleJobChange = async (jobId: string) => {
     setSelectedJobId(jobId)

@@ -4,9 +4,16 @@
     "strict": true,
     "baseUrl": ".",
     "paths": {
-      "~/*": ["./src/*"]
+      "~/*": [
+        "./src/*"
+      ]
     }
   },
-  "include": ["src/**/*", ".plasmo/**/*"],
-  "exclude": ["node_modules"]
+  "include": [
+    ".plasmo/index.d.ts",
+    "src/**/*"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 }

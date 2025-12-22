@@ -16,6 +16,7 @@ import {
   clearAllStorageData,
   getSelectedJobId,
   setSelectedJobId,
+  getApiBaseUrl,
   setApiBaseUrl,
   isAuthenticated
 } from "~/lib/storage"
@@ -39,6 +40,23 @@ import type {
 } from "~/types"
 
 console.log("[Klen] Background service worker started")
+
+function normalizeApiBaseUrl(url: string): string {
+  return url.trim().replace(/\/+$/, "")
+}
+
+function validateApiBaseUrl(url: string): string | null {
+  try {
+    const parsed = new URL(url)
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return "API URL must start with http:// or https://"
+    }
+  } catch {
+    return "Invalid API URL"
+  }
+
+  return null
+}
 
 // ============================================================================
 // Message Handler
@@ -79,6 +97,9 @@ async function handleMessage(
     case "GET_AUTH_STATUS":
       return handleGetAuthStatus()
 
+    case "OPEN_POPUP":
+      return handleOpenPopup()
+
     case "GET_JOBS":
       return handleGetJobs(message.payload as { search?: string })
 
@@ -105,6 +126,29 @@ async function handleMessage(
 // Message Handlers
 // ============================================================================
 
+async function handleOpenPopup(): Promise<MessageResponse> {
+  try {
+    if (chrome.action?.openPopup) {
+      await chrome.action.openPopup()
+      return { success: true }
+    }
+  } catch (error) {
+    console.warn("[Klen] openPopup failed:", error)
+  }
+
+  try {
+    const url = chrome.runtime.getURL("popup.html")
+    await chrome.tabs.create({ url })
+    return { success: true }
+  } catch (error) {
+    console.warn("[Klen] tabs.create for popup failed:", error)
+    return {
+      success: false,
+      error: "Please click the Klen extension icon to open the popup."
+    }
+  }
+}
+
 /**
  * Handle login request
  */
@@ -113,18 +157,28 @@ async function handleLogin(payload: LoginPayload): Promise<MessageResponse> {
     const { email, password, apiBaseUrl } = payload
 
     // Set API base URL if provided
-    if (apiBaseUrl) {
-      await setApiBaseUrl(apiBaseUrl)
+    const normalizedApiBaseUrl = apiBaseUrl
+      ? normalizeApiBaseUrl(apiBaseUrl)
+      : undefined
+
+    if (normalizedApiBaseUrl) {
+      const validationError = validateApiBaseUrl(normalizedApiBaseUrl)
+      if (validationError) {
+        return { success: false, error: validationError }
+      }
+
+      await setApiBaseUrl(normalizedApiBaseUrl)
     }
 
     // Perform login
-    const response = await apiLogin(email, password, apiBaseUrl)
+    const response = await apiLogin(email, password, normalizedApiBaseUrl)
 
     // Store tokens
     await setAuthTokens({
       access_token: response.access_token,
       refresh_token: response.refresh_token,
-      token_type: response.token_type
+      token_type: response.token_type,
+      expires_at: Date.now() + Math.max(0, response.expires_in - 30) * 1000
     })
 
     // Store user info
@@ -142,7 +196,12 @@ async function handleLogin(payload: LoginPayload): Promise<MessageResponse> {
     console.error("[Klen] Login error:", error)
     return {
       success: false,
-      error: error instanceof ApiError ? error.message : "Login failed"
+      error:
+        error instanceof ApiError
+          ? error.message
+          : error instanceof Error
+            ? error.message
+            : "Login failed"
     }
   }
 }
@@ -172,13 +231,15 @@ async function handleGetAuthStatus(): Promise<MessageResponse> {
     const authenticated = await isAuthenticated()
     const user = authenticated ? await getUserInfo() : null
     const selectedJobId = await getSelectedJobId()
+    const apiBaseUrl = await getApiBaseUrl()
 
     return {
       success: true,
       data: {
         isAuthenticated: authenticated,
         user,
-        selectedJobId
+        selectedJobId,
+        apiBaseUrl
       }
     }
   } catch (error) {
@@ -198,10 +259,17 @@ async function handleGetJobs(
 ): Promise<MessageResponse<{ jobs: Job[] }>> {
   try {
     const response = await listJobs(1, 50, payload?.search)
+    const responseAny = response as unknown as { jobs?: Job[]; items?: Job[] }
+    const jobs = Array.isArray(responseAny.jobs)
+      ? responseAny.jobs
+      : Array.isArray(responseAny.items)
+        ? responseAny.items
+        : []
+
     return {
       success: true,
       data: {
-        jobs: response.items
+        jobs
       }
     }
   } catch (error) {
