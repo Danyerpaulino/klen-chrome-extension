@@ -282,6 +282,7 @@ async function sendMessage<T>(
 function LinkedInProfilePanel() {
   const [isOpen, setIsOpen] = useState(false)
   const hasAutoOpenedRef = useRef(false)
+  const profileExtractAttemptsRef = useRef(0)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [jobs, setJobs] = useState<Job[]>([])
   const [selectedJobId, setSelectedJobId] = useState<string>("")
@@ -344,13 +345,36 @@ function LinkedInProfilePanel() {
 
   // Extract profile when panel opens
   useEffect(() => {
-    if (isOpen && isLinkedInProfilePage()) {
+    if (!isOpen || !isLinkedInProfilePage()) {
+      return
+    }
+
+    let isCancelled = false
+    profileExtractAttemptsRef.current = 0
+
+    const extractAndUpdate = () => {
       const { profile } = extractLinkedInProfile()
+      if (isCancelled) return
+
       setProfileData({
         name: profile.name || "Unknown",
         title: profile.headline || profile.job_title || "",
         imageUrl: profile.profile_image_url
       })
+
+      profileExtractAttemptsRef.current += 1
+      if (
+        profileExtractAttemptsRef.current < 3 &&
+        (!profile.name || profile.name === "Unknown")
+      ) {
+        window.setTimeout(extractAndUpdate, 1000)
+      }
+    }
+
+    extractAndUpdate()
+
+    return () => {
+      isCancelled = true
     }
   }, [isOpen])
 

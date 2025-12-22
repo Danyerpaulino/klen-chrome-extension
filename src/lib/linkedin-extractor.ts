@@ -19,7 +19,8 @@ const SELECTORS = {
     ".pv-text-details__left-panel h1",
     ".pv-top-card--list li:first-child",
     'h1[data-anonymize="person-name"]',
-    ".top-card-layout__title"
+    ".top-card-layout__title",
+    "main h1"
   ],
 
   // Headline selectors
@@ -136,6 +137,47 @@ function getTextContent(element: Element | null): string {
   return (element.textContent || "").trim().replace(/\s+/g, " ")
 }
 
+function getMetaContent(selectors: string[]): string {
+  for (const selector of selectors) {
+    try {
+      const element = document.querySelector(selector) as HTMLMetaElement | null
+      if (element?.content) {
+        return element.content
+      }
+    } catch {
+      // Ignore invalid selectors
+    }
+  }
+  return ""
+}
+
+function parseNameFromTitle(title: string): string {
+  let cleaned = title.trim()
+  if (!cleaned) {
+    return ""
+  }
+
+  // Drop trailing " | LinkedIn"
+  cleaned = cleaned.replace(/\s*\|\s*LinkedIn\s*$/i, "")
+
+  // Common patterns: "Name - Title - Company" (only split on spaced separators)
+  cleaned = cleaned.split(/\s[-–]\s/)[0]
+
+  // Any remaining pipe variants
+  cleaned = cleaned.split(" | ")[0]
+
+  return cleaned.trim()
+}
+
+function isPlausibleName(name: string): boolean {
+  const trimmed = name.trim()
+  if (!trimmed) return false
+  const lower = trimmed.toLowerCase()
+  if (lower === "linkedin") return false
+  if (lower.includes("linkedin member")) return false
+  return true
+}
+
 /**
  * Extract the canonical LinkedIn URL from the page
  */
@@ -163,7 +205,30 @@ export function extractPublicIdentifier(url: string): string | null {
  */
 function extractName(): { fullName: string; firstName?: string; lastName?: string } {
   const nameElement = querySelector(SELECTORS.name)
-  const fullName = getTextContent(nameElement) || "Unknown"
+  let fullName = getTextContent(nameElement)
+
+  if (!isPlausibleName(fullName)) {
+    const metaTitle = getMetaContent([
+      'meta[property="og:title"]',
+      'meta[name="twitter:title"]',
+      'meta[name="title"]'
+    ])
+    const metaName = parseNameFromTitle(metaTitle)
+    if (isPlausibleName(metaName)) {
+      fullName = metaName
+    }
+  }
+
+  if (!isPlausibleName(fullName)) {
+    const titleName = parseNameFromTitle(document.title || "")
+    if (isPlausibleName(titleName)) {
+      fullName = titleName
+    }
+  }
+
+  if (!isPlausibleName(fullName)) {
+    fullName = "Unknown"
+  }
 
   // Try to split into first/last name
   const parts = fullName.split(" ")
