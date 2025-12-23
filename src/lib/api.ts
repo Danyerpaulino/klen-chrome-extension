@@ -312,11 +312,15 @@ export async function logout(): Promise<void> {
 export async function listJobs(
   page = 1,
   pageSize = 50,
-  search?: string
+  search?: string,
+  status?: string
 ): Promise<JobListResponse> {
   let endpoint = `/api/v1/jobs?page=${page}&page_size=${pageSize}`
   if (search) {
     endpoint += `&search=${encodeURIComponent(search)}`
+  }
+  if (status) {
+    endpoint += `&status=${encodeURIComponent(status)}`
   }
   return apiFetch<JobListResponse>(endpoint)
 }
@@ -357,7 +361,8 @@ export async function resolveByLinkedIn(
 ): Promise<ResolveByLinkedInResponse> {
   const encodedUrl = encodeURIComponent(linkedinUrl)
   return apiFetch<ResolveByLinkedInResponse>(
-    `/api/v1/jobs/${jobId}/candidates/resolve-by-linkedin?linkedin_url=${encodedUrl}`
+    `/api/v1/jobs/${jobId}/candidates/resolve-by-linkedin?linkedin_url=${encodedUrl}`,
+    { cache: "no-store" }
   )
 }
 

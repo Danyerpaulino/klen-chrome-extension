@@ -258,18 +258,21 @@ async function handleGetJobs(
   payload?: { search?: string }
 ): Promise<MessageResponse<{ jobs: Job[] }>> {
   try {
-    const response = await listJobs(1, 50, payload?.search)
+    const response = await listJobs(1, 50, payload?.search, "active")
     const responseAny = response as unknown as { jobs?: Job[]; items?: Job[] }
     const jobs = Array.isArray(responseAny.jobs)
       ? responseAny.jobs
       : Array.isArray(responseAny.items)
         ? responseAny.items
         : []
+    const activeJobs = jobs.filter(
+      (job) => typeof job?.status === "string" && job.status.toLowerCase() === "active"
+    )
 
     return {
       success: true,
       data: {
-        jobs
+        jobs: activeJobs
       }
     }
   } catch (error) {

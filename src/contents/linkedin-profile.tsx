@@ -15,7 +15,8 @@ import {
 import type {
   Job,
   LinkedInImportResponse,
-  MessageResponse
+  MessageResponse,
+  ResolveByLinkedInResponse
 } from "~/types"
 
 // Content script configuration
@@ -278,6 +279,15 @@ async function sendMessage<T>(
   })
 }
 
+function coerceFiniteNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value
+  if (typeof value === "string") {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  return null
+}
+
 // Main content component
 function LinkedInProfilePanel() {
   const [isOpen, setIsOpen] = useState(false)
@@ -292,6 +302,7 @@ function LinkedInProfilePanel() {
     message: string
   } | null>(null)
   const [importResult, setImportResult] = useState<LinkedInImportResponse | null>(null)
+  const importAttemptRef = useRef(0)
 
   // Profile data from extraction
   const [profileData, setProfileData] = useState<{
@@ -384,10 +395,14 @@ function LinkedInProfilePanel() {
   }
 
   const handleAddCandidate = async () => {
+    const attemptId = ++importAttemptRef.current
+
     if (!selectedJobId) {
       setStatus({ type: "error", message: "Please select a job first" })
       return
     }
+
+    const jobId = selectedJobId
 
     if (!isLinkedInProfilePage()) {
       setStatus({ type: "error", message: "Not a LinkedIn profile page" })
@@ -406,7 +421,7 @@ function LinkedInProfilePanel() {
       const response = await sendMessage<LinkedInImportResponse>(
         "IMPORT_LINKEDIN_PROFILE",
         {
-          jobId: selectedJobId,
+          jobId,
           profile,
           profileUrl,
           rawText
@@ -421,10 +436,65 @@ function LinkedInProfilePanel() {
             message: "Candidate already exists in this job"
           })
         } else {
+          const hasScore = typeof response.data.score === "number"
           setStatus({
-            type: "success",
-            message: "Candidate added successfully!"
+            type: hasScore ? "success" : "info",
+            message: hasScore
+              ? "Candidate added successfully!"
+              : "Candidate added successfully! Scoring in progress..."
           })
+
+          // If scoring is async, poll the resolve endpoint until we get a score.
+          if (!hasScore) {
+            const linkedinUrl = response.data.linkedin_url || profileUrl
+            const startedAt = Date.now()
+            const maxDurationMs = 5 * 60 * 1000
+            const baseDelayMs = 1200
+            const maxDelayMs = 15_000
+
+            let attempt = 0
+            let delayMs = baseDelayMs
+
+            while (Date.now() - startedAt < maxDurationMs) {
+              await new Promise((resolve) => window.setTimeout(resolve, delayMs))
+
+              // Abort if a new import attempt has started
+              if (importAttemptRef.current !== attemptId) return
+
+              const resolveResponse =
+                await sendMessage<ResolveByLinkedInResponse>(
+                  "RESOLVE_LINKEDIN_CANDIDATE",
+                  { jobId, linkedinUrl }
+                )
+
+              const resolvedData = resolveResponse.data
+              const resolvedScore = coerceFiniteNumber(resolvedData?.score)
+
+              if (
+                resolveResponse.success &&
+                resolvedData?.found &&
+                resolvedScore !== null
+              ) {
+                setImportResult((prev) =>
+                  prev ? { ...prev, score: resolvedScore } : prev
+                )
+                setStatus({
+                  type: "success",
+                  message: "Candidate added successfully!"
+                })
+                return
+              }
+
+              attempt += 1
+              delayMs = Math.min(maxDelayMs, baseDelayMs * Math.pow(1.5, attempt))
+            }
+
+            setStatus({
+              type: "info",
+              message:
+                "Candidate added successfully! Scoring is taking longer than expected — it will update in Klen once complete."
+            })
+          }
         }
       } else {
         setStatus({
@@ -449,7 +519,7 @@ function LinkedInProfilePanel() {
 
   // Get score badge color
   const getScoreBadgeClass = (score?: number) => {
-    if (!score) return ""
+    if (typeof score !== "number") return ""
     if (score >= 70) return "klen-score-high"
     if (score >= 50) return "klen-score-medium"
     return "klen-score-low"
@@ -565,7 +635,7 @@ function LinkedInProfilePanel() {
             {status && (
               <div className={`klen-status klen-status-${status.type}`}>
                 {status.message}
-                {importResult?.score !== undefined && (
+                {typeof importResult?.score === "number" && (
                   <span
                     className={`klen-score-badge ${getScoreBadgeClass(importResult.score)}`}
                     style={{ marginLeft: 8 }}
