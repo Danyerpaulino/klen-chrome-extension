@@ -10,7 +10,11 @@
 
 import { useEffect, useState, useCallback } from "react"
 import type { Job, UserInfo, MessageResponse } from "~/types"
+import { isDevMode } from "~/lib/storage"
 import "./popup.css"
+
+// Check if dev tools should be shown (set at build time)
+const SHOW_DEV_TOOLS = isDevMode()
 
 // Send message to background script
 async function sendMessage<T>(
@@ -178,7 +182,7 @@ function Popup() {
             </linearGradient>
           </defs>
         </svg>
-        <h1>Klen</h1>
+        <h1>Klen AI</h1>
       </div>
 
       <p className="subtitle">Sign in to add LinkedIn candidates</p>
@@ -209,9 +213,10 @@ function Popup() {
           />
         </div>
 
-        {showAdvanced && (
+        {/* Dev-only: API URL override */}
+        {SHOW_DEV_TOOLS && showAdvanced && (
           <div className="form-group">
-            <label htmlFor="apiUrl">API URL</label>
+            <label htmlFor="apiUrl">API URL (Dev)</label>
             <input
               id="apiUrl"
               type="url"
@@ -222,13 +227,15 @@ function Popup() {
           </div>
         )}
 
-        <button
-          type="button"
-          className="link-button"
-          onClick={() => setShowAdvanced(!showAdvanced)}
-        >
-          {showAdvanced ? "Hide" : "Show"} advanced options
-        </button>
+        {SHOW_DEV_TOOLS && (
+          <button
+            type="button"
+            className="link-button"
+            onClick={() => setShowAdvanced(!showAdvanced)}
+          >
+            {showAdvanced ? "Hide" : "Show"} dev options
+          </button>
+        )}
 
         {error && <div className="error-message">{error}</div>}
 
@@ -340,7 +347,11 @@ function Popup() {
       <div className="instructions">
         <p>
           On LinkedIn profiles, click the purple Klen button in the bottom-right
-          to open the panel, then “Add as Candidate”.
+          to open the panel, then "Add as Candidate".
+        </p>
+        <p className="privacy-note">
+          Nothing happens automatically. We only collect profile data when you
+          explicitly click to add a candidate.
         </p>
       </div>
     </div>

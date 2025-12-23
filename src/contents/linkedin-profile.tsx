@@ -258,6 +258,16 @@ export const getStyle: PlasmoGetStyle = () => {
       background: #fee2e2;
       color: #991b1b;
     }
+
+    .klen-privacy-note {
+      margin-top: 12px;
+      padding: 8px 10px;
+      background: #ecfdf5;
+      border-radius: 6px;
+      color: #065f46;
+      font-size: 11px;
+      text-align: center;
+    }
   `
   return style
 }
@@ -645,6 +655,11 @@ function LinkedInProfilePanel() {
                 )}
               </div>
             )}
+
+            {/* Privacy note */}
+            <div className="klen-privacy-note">
+              Nothing happens automatically. Data is only collected when you click "Add as Candidate".
+            </div>
           </>
         )}
       </div>

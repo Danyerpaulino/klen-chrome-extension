@@ -6,8 +6,13 @@
 import { Storage } from "@plasmohq/storage"
 import type { AuthTokens, UserInfo, StorageData } from "~/types"
 
-// Default API base URL - can be overridden in settings
-const DEFAULT_API_BASE_URL = "https://api.klen.ai"
+// API base URL from environment (set at build time)
+// In development: http://localhost:8000
+// In production: https://api.klen.ai
+const API_BASE_URL = process.env.PLASMO_PUBLIC_API_BASE_URL || "https://api.klen.ai"
+
+// Whether dev tools are enabled (allows API URL override in dev only)
+const SHOW_DEV_TOOLS = process.env.PLASMO_PUBLIC_SHOW_DEV_TOOLS === "true"
 
 // Storage keys
 const STORAGE_KEYS = {
@@ -129,16 +134,28 @@ export async function clearSelectedJobId(): Promise<void> {
 }
 
 /**
- * Get API base URL from storage
+ * Get API base URL
+ * In production: always uses the build-time environment variable
+ * In development: can be overridden via storage for testing
  */
 export async function getApiBaseUrl(): Promise<string> {
-  try {
-    const url = await storage.get<string>(STORAGE_KEYS.API_BASE_URL)
-    return url || DEFAULT_API_BASE_URL
-  } catch (error) {
-    console.error("[Klen] Error getting API base URL:", error)
-    return DEFAULT_API_BASE_URL
+  // In dev mode, allow storage override for testing different backends
+  if (SHOW_DEV_TOOLS) {
+    try {
+      const url = await storage.get<string>(STORAGE_KEYS.API_BASE_URL)
+      if (url) return url
+    } catch (error) {
+      console.error("[Klen] Error getting API base URL:", error)
+    }
   }
+  return API_BASE_URL
+}
+
+/**
+ * Check if dev tools are enabled (for conditional UI)
+ */
+export function isDevMode(): boolean {
+  return SHOW_DEV_TOOLS
 }
 
 /**

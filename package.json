@@ -1,8 +1,8 @@
 {
   "name": "klen-linkedin-extension",
-  "displayName": "Klen LinkedIn Extension",
+  "displayName": "Klen AI LinkedIn Extension",
   "version": "1.0.0",
-  "description": "Import LinkedIn profiles as candidates into Klen recruiting platform",
+  "description": "Add LinkedIn profiles to your Klen recruiting pipeline with one click.",
   "author": "Klen AI",
   "optionalDependencies": {
     "@parcel/watcher": "*"
@@ -32,15 +32,11 @@
   },
   "manifest": {
     "host_permissions": [
-      "https://www.linkedin.com/*",
-      "https://linkedin.com/*",
-      "https://api.klen.ai/*",
-      "http://localhost:8000/*"
+      "https://www.linkedin.com/in/*",
+      "https://api.klen.ai/*"
     ],
     "permissions": [
-      "storage",
-      "activeTab",
-      "scripting"
+      "storage"
     ]
   }
 }

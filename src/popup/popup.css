@@ -353,6 +353,15 @@ body {
   text-align: center;
 }
 
+.instructions .privacy-note {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: #ecfdf5;
+  border-radius: 6px;
+  color: #065f46;
+  font-size: 12px;
+}
+
 /* Settings Container */
 .settings-container {
   padding: 16px;
