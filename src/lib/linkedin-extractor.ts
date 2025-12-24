@@ -8,7 +8,8 @@
 import type {
   LinkedInProfileSnapshot,
   LinkedInExperienceEntry,
-  LinkedInEducationEntry
+  LinkedInEducationEntry,
+  LinkedInCertificationEntry
 } from "~/types"
 
 // Selector variants for different LinkedIn UI versions
@@ -75,6 +76,14 @@ const SELECTORS = {
     ".pvs-entity",
     ".pv-education-entity",
     ".education-item"
+  ],
+
+  // Certifications section selectors
+  certificationsSection: [
+    "#licenses_and_certifications ~ .pvs-list__outer-container",
+    "#licenses_and_certifications + div + div",
+    'section[data-section="licenses_and_certifications"]',
+    ".certifications-section"
   ],
 
   // Skills section selectors
@@ -377,6 +386,24 @@ function parseDateRange(dateText: string): { start?: string; end?: string } {
   return {}
 }
 
+function parseCertificationDates(
+  dateText: string
+): { date?: string; expiry_date?: string } {
+  if (!dateText) return {}
+
+  const issuedMatch = dateText.match(/Issued\s+([^·]+?)(?:\s*·|$)/i)
+  const expiresMatch = dateText.match(/Expires\s+([^·]+?)(?:\s*·|$)/i)
+
+  const date = issuedMatch ? issuedMatch[1].trim() : undefined
+  const expiry_date = expiresMatch ? expiresMatch[1].trim() : undefined
+
+  if (!date && !expiry_date) {
+    return { date: dateText.trim() }
+  }
+
+  return { date, expiry_date }
+}
+
 /**
  * Extract education entries
  */
@@ -432,6 +459,54 @@ function extractEducation(): LinkedInEducationEntry[] {
   })
 
   return education.slice(0, 5) // Limit to 5 entries
+}
+
+/**
+ * Extract certifications (licenses & certifications) entries
+ */
+function extractCertifications(): LinkedInCertificationEntry[] {
+  const certifications: LinkedInCertificationEntry[] = []
+
+  const section = querySelector(SELECTORS.certificationsSection)
+  if (!section) return certifications
+
+  const items = section.querySelectorAll(".pvs-entity, li.artdeco-list__item")
+
+  items.forEach((item) => {
+    try {
+      const nameEl = item.querySelector(
+        ".mr1.hoverable-link-text span[aria-hidden='true'], " +
+          ".t-bold span[aria-hidden='true']"
+      )
+      const name = getTextContent(nameEl)
+
+      const issuerEl = item.querySelector(
+        ".t-14.t-normal span[aria-hidden='true'], " +
+          ".t-normal span[aria-hidden='true']"
+      )
+      const issuer = getTextContent(issuerEl).split("·")[0].trim()
+
+      const dateEl = item.querySelector(
+        ".pvs-entity__caption-wrapper span[aria-hidden='true'], " +
+          ".t-black--light span[aria-hidden='true']"
+      )
+      const dateText = getTextContent(dateEl)
+      const { date, expiry_date } = parseCertificationDates(dateText)
+
+      if (name || issuer) {
+        certifications.push({
+          name: name || undefined,
+          issuer: issuer || undefined,
+          date,
+          expiry_date
+        })
+      }
+    } catch (e) {
+      console.error("[Klen] Error extracting certification item:", e)
+    }
+  })
+
+  return certifications.slice(0, 10)
 }
 
 /**
@@ -508,6 +583,15 @@ function generateRawText(profile: LinkedInProfileSnapshot): string {
     sections.push(`Skills: ${profile.skills.join(", ")}`)
   }
 
+  if (profile.certifications?.length) {
+    const names = profile.certifications
+      .map((cert) => cert?.name)
+      .filter(Boolean) as string[]
+    if (names.length) {
+      sections.push(`Certifications: ${names.join(", ")}`)
+    }
+  }
+
   profile.experience?.forEach((exp) => {
     let text = ""
     if (exp.title) text += exp.title
@@ -551,6 +635,7 @@ export function extractLinkedInProfile(): {
   // Extract sections
   const experience = extractExperience()
   const education = extractEducation()
+  const certifications = extractCertifications()
   const skills = extractSkills()
   const profileImageUrl = extractProfileImage()
 
@@ -570,6 +655,7 @@ export function extractLinkedInProfile(): {
     skills,
     experience,
     education,
+    certifications,
     profile_image_url: profileImageUrl
   }
 
@@ -580,6 +666,7 @@ export function extractLinkedInProfile(): {
     name: fullName,
     headline,
     skillsCount: skills.length,
+    certificationsCount: certifications.length,
     experienceCount: experience.length,
     educationCount: education.length
   })

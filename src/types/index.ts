@@ -64,6 +64,13 @@ export interface LinkedInEducationEntry {
   end?: string
 }
 
+export interface LinkedInCertificationEntry {
+  name?: string
+  issuer?: string
+  date?: string
+  expiry_date?: string
+}
+
 export interface LinkedInProfileSnapshot {
   name?: string
   first_name?: string
@@ -76,6 +83,7 @@ export interface LinkedInProfileSnapshot {
   skills: string[]
   experience: LinkedInExperienceEntry[]
   education: LinkedInEducationEntry[]
+  certifications: LinkedInCertificationEntry[]
   profile_image_url?: string
 }
 
