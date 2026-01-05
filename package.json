@@ -1,7 +1,7 @@
 {
   "name": "klen-linkedin-extension",
   "displayName": "Klen AI LinkedIn Extension",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Add LinkedIn profiles to your Klen recruiting pipeline with one click.",
   "author": "Klen AI",
   "optionalDependencies": {
