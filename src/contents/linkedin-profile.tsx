@@ -535,6 +535,14 @@ function LinkedInProfilePanel() {
     return "klen-score-low"
   }
 
+  const getScoreEmoji = (score?: number) => {
+    if (typeof score !== "number") return ""
+    if (score >= 85) return "🔥"
+    if (score >= 70) return "✨"
+    if (score >= 50) return "👍"
+    return "🧊"
+  }
+
   // Render toggle button when panel is closed
   if (!isOpen) {
     return (
@@ -650,7 +658,7 @@ function LinkedInProfilePanel() {
                     className={`klen-score-badge ${getScoreBadgeClass(importResult.score)}`}
                     style={{ marginLeft: 8 }}
                   >
-                    Score: {importResult.score}%
+                    {getScoreEmoji(importResult.score)} Score: {importResult.score}%
                   </span>
                 )}
               </div>
