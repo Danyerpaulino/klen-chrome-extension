@@ -440,71 +440,71 @@ function LinkedInProfilePanel() {
 
       if (response.success && response.data) {
         setImportResult(response.data)
-        if (response.data.is_duplicate) {
-          setStatus({
-            type: "info",
-            message: "Candidate already exists in this job"
-          })
-        } else {
-          const hasScore = typeof response.data.score === "number"
-          setStatus({
-            type: hasScore ? "success" : "info",
-            message: hasScore
+        const hasScore = typeof response.data.score === "number"
+        const message =
+          response.data.message ||
+          (response.data.is_duplicate
+            ? "Candidate already exists in this job"
+            : hasScore
               ? "Candidate added successfully!"
-              : "Candidate added successfully! Scoring in progress..."
-          })
+              : "Candidate added successfully! Scoring in progress...")
 
-          // If scoring is async, poll the resolve endpoint until we get a score.
-          if (!hasScore) {
-            const linkedinUrl = response.data.linkedin_url || profileUrl
-            const startedAt = Date.now()
-            const maxDurationMs = 5 * 60 * 1000
-            const baseDelayMs = 1200
-            const maxDelayMs = 15_000
+        setStatus({
+          type: response.data.is_duplicate ? "info" : hasScore ? "success" : "info",
+          message
+        })
 
-            let attempt = 0
-            let delayMs = baseDelayMs
+        // If scoring is async, poll the resolve endpoint until we get a score.
+        if (!hasScore) {
+          const linkedinUrl = response.data.linkedin_url || profileUrl
+          const startedAt = Date.now()
+          const maxDurationMs = 5 * 60 * 1000
+          const baseDelayMs = 1200
+          const maxDelayMs = 15_000
 
-            while (Date.now() - startedAt < maxDurationMs) {
-              await new Promise((resolve) => window.setTimeout(resolve, delayMs))
+          let attempt = 0
+          let delayMs = baseDelayMs
 
-              // Abort if a new import attempt has started
-              if (importAttemptRef.current !== attemptId) return
+          while (Date.now() - startedAt < maxDurationMs) {
+            await new Promise((resolve) => window.setTimeout(resolve, delayMs))
 
-              const resolveResponse =
-                await sendMessage<ResolveByLinkedInResponse>(
-                  "RESOLVE_LINKEDIN_CANDIDATE",
-                  { jobId, linkedinUrl }
-                )
+            // Abort if a new import attempt has started
+            if (importAttemptRef.current !== attemptId) return
 
-              const resolvedData = resolveResponse.data
-              const resolvedScore = coerceFiniteNumber(resolvedData?.score)
+            const resolveResponse = await sendMessage<ResolveByLinkedInResponse>(
+              "RESOLVE_LINKEDIN_CANDIDATE",
+              { jobId, linkedinUrl }
+            )
 
-              if (
-                resolveResponse.success &&
-                resolvedData?.found &&
-                resolvedScore !== null
-              ) {
-                setImportResult((prev) =>
-                  prev ? { ...prev, score: resolvedScore } : prev
-                )
-                setStatus({
-                  type: "success",
-                  message: "Candidate added successfully!"
-                })
-                return
-              }
+            const resolvedData = resolveResponse.data
+            const resolvedScore = coerceFiniteNumber(resolvedData?.score)
 
-              attempt += 1
-              delayMs = Math.min(maxDelayMs, baseDelayMs * Math.pow(1.5, attempt))
+            if (
+              resolveResponse.success &&
+              resolvedData?.found &&
+              resolvedScore !== null
+            ) {
+              setImportResult((prev) =>
+                prev ? { ...prev, score: resolvedScore } : prev
+              )
+              setStatus({
+                type: "success",
+                message: response.data.is_duplicate
+                  ? "Candidate updated successfully!"
+                  : "Candidate added successfully!"
+              })
+              return
             }
 
-            setStatus({
-              type: "info",
-              message:
-                "Candidate added successfully! Scoring is taking longer than expected — it will update in Klen once complete."
-            })
+            attempt += 1
+            delayMs = Math.min(maxDelayMs, baseDelayMs * Math.pow(1.5, attempt))
           }
+
+          setStatus({
+            type: "info",
+            message:
+              "Candidate saved successfully, but scoring is taking longer than expected — it will update in Klen once complete."
+          })
         }
       } else {
         setStatus({
