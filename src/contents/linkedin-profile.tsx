@@ -9,12 +9,15 @@ import type { PlasmoCSConfig, PlasmoGetStyle } from "plasmo"
 import { useEffect, useState, useCallback, useRef } from "react"
 import {
   extractLinkedInProfile,
-  isLinkedInProfilePage,
-  extractProfileUrl
+  isLinkedInProfilePage
 } from "~/lib/linkedin-extractor"
 import type {
   Job,
+  LinkedInICPResponse,
   LinkedInImportResponse,
+  LinkedInInMailDraftResponse,
+  LinkedInInMailLength,
+  LinkedInInMailTone,
   MessageResponse,
   ResolveByLinkedInResponse
 } from "~/types"
@@ -178,6 +181,94 @@ export const getStyle: PlasmoGetStyle = () => {
       background: #e5e7eb;
     }
 
+    .klen-status-action {
+      width: auto;
+      padding: 4px 8px;
+      font-size: 12px;
+      border-radius: 999px;
+      margin-left: 8px;
+    }
+
+    .klen-status-action:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .klen-action-stack {
+      display: grid;
+      gap: 8px;
+    }
+
+    .klen-field-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .klen-field-group {
+      display: grid;
+      gap: 6px;
+    }
+
+    .klen-field-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: #374151;
+    }
+
+    .klen-select {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      font-size: 13px;
+      background: white;
+    }
+
+    .klen-select:focus {
+      outline: none;
+      border-color: #6366f1;
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    }
+
+    .klen-inmail-preview {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: #f8fafc;
+      border: 1px solid #e5e7eb;
+      display: grid;
+      gap: 8px;
+    }
+
+    .klen-inmail-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: #6b7280;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .klen-inmail-subject {
+      font-size: 13px;
+      font-weight: 600;
+      color: #111827;
+    }
+
+    .klen-inmail-body {
+      font-size: 12px;
+      color: #374151;
+      white-space: pre-wrap;
+      line-height: 1.45;
+    }
+
+    .klen-copy-btn {
+      width: fit-content;
+      padding: 6px 10px;
+      font-size: 12px;
+    }
+
     .klen-status {
       margin-top: 12px;
       padding: 10px 12px;
@@ -298,6 +389,12 @@ function coerceFiniteNumber(value: unknown): number | null {
   return null
 }
 
+function formatScore(value: unknown): number | null {
+  const parsed = coerceFiniteNumber(value)
+  if (parsed === null) return null
+  return Math.round(parsed)
+}
+
 // Main content component
 function LinkedInProfilePanel() {
   const [isOpen, setIsOpen] = useState(false)
@@ -307,11 +404,26 @@ function LinkedInProfilePanel() {
   const [jobs, setJobs] = useState<Job[]>([])
   const [selectedJobId, setSelectedJobId] = useState<string>("")
   const [isLoading, setIsLoading] = useState(false)
+  const [isRescoreLoading, setIsRescoreLoading] = useState(false)
   const [status, setStatus] = useState<{
     type: "success" | "error" | "info"
     message: string
   } | null>(null)
   const [importResult, setImportResult] = useState<LinkedInImportResponse | null>(null)
+  const [inmailStatus, setInmailStatus] = useState<{
+    type: "success" | "error" | "info"
+    message: string
+  } | null>(null)
+  const [inmailDraft, setInmailDraft] = useState<LinkedInInMailDraftResponse | null>(null)
+  const [isInmailLoading, setIsInmailLoading] = useState(false)
+  const [inmailTone, setInmailTone] = useState<LinkedInInMailTone>("professional")
+  const [inmailLength, setInmailLength] = useState<LinkedInInMailLength>("short")
+  const [icpStatus, setIcpStatus] = useState<{
+    type: "success" | "error" | "info"
+    message: string
+  } | null>(null)
+  const [icpResult, setIcpResult] = useState<LinkedInICPResponse | null>(null)
+  const [isIcpLoading, setIsIcpLoading] = useState(false)
   const importAttemptRef = useRef(0)
 
   // Profile data from extraction
@@ -336,6 +448,7 @@ function LinkedInProfilePanel() {
 
     if (response.success && response.data) {
       setIsAuthenticated(response.data.isAuthenticated)
+
       if (response.data.selectedJobId) {
         setSelectedJobId(response.data.selectedJobId)
 
@@ -401,11 +514,14 @@ function LinkedInProfilePanel() {
 
   const handleJobChange = async (jobId: string) => {
     setSelectedJobId(jobId)
+    setInmailStatus(null)
+    setInmailDraft(null)
     await sendMessage("SELECT_JOB", { jobId })
   }
 
-  const handleAddCandidate = async () => {
+  const handleAddCandidate = async (options?: { forceRescore?: boolean }) => {
     const attemptId = ++importAttemptRef.current
+    const isRescore = Boolean(options?.forceRescore)
 
     if (!selectedJobId) {
       setStatus({ type: "error", message: "Please select a job first" })
@@ -419,9 +535,15 @@ function LinkedInProfilePanel() {
       return
     }
 
-    setIsLoading(true)
-    setStatus(null)
-    setImportResult(null)
+    if (isRescore) {
+      setIsRescoreLoading(true)
+    } else {
+      setIsLoading(true)
+      setStatus(null)
+      setImportResult(null)
+      setInmailStatus(null)
+      setInmailDraft(null)
+    }
 
     try {
       // Extract profile data
@@ -434,7 +556,8 @@ function LinkedInProfilePanel() {
           jobId,
           profile,
           profileUrl,
-          rawText
+          rawText,
+          forceRescore: isRescore
         }
       )
 
@@ -518,8 +641,16 @@ function LinkedInProfilePanel() {
         message: error instanceof Error ? error.message : "Unknown error"
       })
     } finally {
-      setIsLoading(false)
+      if (isRescore) {
+        setIsRescoreLoading(false)
+      } else {
+        setIsLoading(false)
+      }
     }
+  }
+
+  const handleRescoreCandidate = async () => {
+    await handleAddCandidate({ forceRescore: true })
   }
 
   const openPopup = () => {
@@ -535,6 +666,170 @@ function LinkedInProfilePanel() {
     return "klen-score-low"
   }
 
+  const handleCreateIcp = async () => {
+    if (!selectedJobId) {
+      setIcpStatus({ type: "error", message: "Please select a job first" })
+      return
+    }
+
+    if (!isLinkedInProfilePage()) {
+      setIcpStatus({ type: "error", message: "Not a LinkedIn profile page" })
+      return
+    }
+
+    setIsIcpLoading(true)
+    setIcpStatus(null)
+    setIcpResult(null)
+
+    try {
+      const { profile, profileUrl } = extractLinkedInProfile()
+
+      const response = await sendMessage<LinkedInICPResponse>(
+        "CREATE_ICP_FROM_PROFILE",
+        {
+          jobId: selectedJobId,
+          profile,
+          profileUrl
+        }
+      )
+
+      if (response.success && response.data) {
+        setIcpResult(response.data)
+        setIcpStatus({
+          type: "success",
+          message:
+            response.data.message ||
+            (response.data.updated
+              ? "Ideal Candidate Profile updated!"
+              : "Ideal Candidate Profile created!")
+        })
+      } else {
+        setIcpStatus({
+          type: "error",
+          message: response.error || "Failed to create Ideal Candidate Profile"
+        })
+      }
+    } catch (error) {
+      setIcpStatus({
+        type: "error",
+        message: error instanceof Error ? error.message : "Unknown error"
+      })
+    } finally {
+      setIsIcpLoading(false)
+    }
+  }
+
+  const handleDraftInmail = async () => {
+    if (!selectedJobId) {
+      setInmailStatus({ type: "error", message: "Please select a job first" })
+      return
+    }
+
+    if (!isLinkedInProfilePage()) {
+      setInmailStatus({ type: "error", message: "Not a LinkedIn profile page" })
+      return
+    }
+
+    setIsInmailLoading(true)
+    setInmailStatus(null)
+    setInmailDraft(null)
+
+    try {
+      const { profileUrl } = extractLinkedInProfile()
+      if (!profileUrl) {
+        setInmailStatus({ type: "error", message: "LinkedIn profile URL not found" })
+        return
+      }
+
+      const importMatchesJob = importResult?.job_id === selectedJobId
+      const importMatchesProfile =
+        importResult?.linkedin_url && importResult.linkedin_url === profileUrl
+      const canUseImport = importMatchesJob && importMatchesProfile
+
+      let candidateId = canUseImport ? importResult?.candidate_id : undefined
+      let jobCandidateId = canUseImport ? importResult?.job_candidate_id : undefined
+
+      if (!candidateId && !jobCandidateId) {
+        const resolveResponse = await sendMessage<ResolveByLinkedInResponse>(
+          "RESOLVE_LINKEDIN_CANDIDATE",
+          { jobId: selectedJobId, linkedinUrl: profileUrl }
+        )
+
+        if (!resolveResponse.success || !resolveResponse.data?.found) {
+          setInmailStatus({
+            type: "error",
+            message: "Add this profile as a candidate before drafting an InMail."
+          })
+          return
+        }
+
+        candidateId = resolveResponse.data.candidate_id
+        jobCandidateId = resolveResponse.data.job_candidate_id
+      }
+
+      if (!candidateId && !jobCandidateId) {
+        setInmailStatus({
+          type: "error",
+          message: "Candidate could not be resolved for this job."
+        })
+        return
+      }
+
+      const response = await sendMessage<LinkedInInMailDraftResponse>(
+        "DRAFT_LINKEDIN_INMAIL",
+        {
+          jobId: selectedJobId,
+          request: {
+            candidate_id: candidateId,
+            job_candidate_id: jobCandidateId,
+            linkedin_url: profileUrl,
+            tone: inmailTone,
+            length: inmailLength
+          }
+        }
+      )
+
+      if (response.success && response.data) {
+        setInmailDraft(response.data)
+        setInmailStatus({
+          type: "success",
+          message: "Draft ready. Review and copy when ready."
+        })
+      } else {
+        setInmailStatus({
+          type: "error",
+          message: response.error || "Failed to draft InMail"
+        })
+      }
+    } catch (error) {
+      setInmailStatus({
+        type: "error",
+        message: error instanceof Error ? error.message : "Unknown error"
+      })
+    } finally {
+      setIsInmailLoading(false)
+    }
+  }
+
+  const handleCopyInmail = async () => {
+    if (!inmailDraft) return
+
+    const text = `Subject: ${inmailDraft.subject}\n\n${inmailDraft.content}`
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error("Clipboard access unavailable")
+      }
+
+      await navigator.clipboard.writeText(text)
+      setInmailStatus({ type: "success", message: "InMail copied to clipboard." })
+    } catch (error) {
+      setInmailStatus({
+        type: "error",
+        message: error instanceof Error ? error.message : "Failed to copy InMail"
+      })
+    }
+  }
+
   const getScoreEmoji = (score?: number) => {
     if (typeof score !== "number") return ""
     if (score >= 85) return "🔥"
@@ -542,6 +837,15 @@ function LinkedInProfilePanel() {
     if (score >= 50) return "👍"
     return "🧊"
   }
+
+  const displayScore = formatScore(importResult?.score)
+  const scoreBadgeClass = getScoreBadgeClass(displayScore ?? undefined)
+  const scoreEmoji = getScoreEmoji(displayScore ?? undefined)
+  const canRescore = Boolean(
+    importResult?.is_duplicate &&
+      displayScore !== null &&
+      importResult?.job_id === selectedJobId
+  )
 
   // Render toggle button when panel is closed
   if (!isOpen) {
@@ -640,25 +944,119 @@ function LinkedInProfilePanel() {
               ))}
             </select>
 
-            {/* Add Candidate Button */}
-            <button
-              className="klen-btn klen-btn-primary"
-              onClick={handleAddCandidate}
-              disabled={isLoading || !selectedJobId}
-            >
-              {isLoading ? "Adding..." : "Add as Candidate"}
-            </button>
+            <div className="klen-action-stack">
+              <button
+                className="klen-btn klen-btn-primary"
+                onClick={handleAddCandidate}
+                disabled={isLoading || !selectedJobId}
+              >
+                {isLoading ? "Adding..." : "Add as Candidate"}
+              </button>
+              <>
+                <div className="klen-field-row">
+                  <label className="klen-field-group">
+                    <span className="klen-field-label">Tone</span>
+                    <select
+                      className="klen-select"
+                      value={inmailTone}
+                      onChange={(e) =>
+                        setInmailTone(e.target.value as LinkedInInMailTone)
+                      }
+                    >
+                      <option value="professional">Professional</option>
+                      <option value="friendly">Friendly</option>
+                      <option value="direct">Direct</option>
+                      <option value="warm">Warm</option>
+                      <option value="consultative">Consultative</option>
+                    </select>
+                  </label>
+                  <label className="klen-field-group">
+                    <span className="klen-field-label">Length</span>
+                    <select
+                      className="klen-select"
+                      value={inmailLength}
+                      onChange={(e) =>
+                        setInmailLength(e.target.value as LinkedInInMailLength)
+                      }
+                    >
+                      <option value="short">Short</option>
+                      <option value="medium">Medium</option>
+                      <option value="long">Long</option>
+                    </select>
+                  </label>
+                </div>
+                <button
+                  className="klen-btn klen-btn-secondary"
+                  onClick={handleDraftInmail}
+                  disabled={isInmailLoading || !selectedJobId}
+                >
+                  {isInmailLoading ? "Drafting..." : "Draft InMail"}
+                </button>
+              </>
+              <button
+                className="klen-btn klen-btn-secondary"
+                onClick={handleCreateIcp}
+                disabled={isIcpLoading || !selectedJobId}
+              >
+                {isIcpLoading ? "Building ICP..." : "Use as Ideal Profile"}
+              </button>
+            </div>
 
             {/* Status Message */}
             {status && (
               <div className={`klen-status klen-status-${status.type}`}>
-                {status.message}
-                {typeof importResult?.score === "number" && (
+                <span>{status.message}</span>
+                {canRescore && (
+                  <button
+                    className="klen-btn klen-btn-secondary klen-status-action"
+                    onClick={handleRescoreCandidate}
+                    disabled={isRescoreLoading}
+                  >
+                    {isRescoreLoading ? "Rescoring..." : "Rescore"}
+                  </button>
+                )}
+                {displayScore !== null && (
                   <span
-                    className={`klen-score-badge ${getScoreBadgeClass(importResult.score)}`}
+                    className={`klen-score-badge ${scoreBadgeClass}`}
                     style={{ marginLeft: 8 }}
                   >
-                    {getScoreEmoji(importResult.score)} Score: {importResult.score}%
+                    {scoreEmoji} Score: {displayScore}%
+                  </span>
+                )}
+              </div>
+            )}
+
+            {inmailStatus && (
+              <div className={`klen-status klen-status-${inmailStatus.type}`}>
+                {inmailStatus.message}
+              </div>
+            )}
+
+            {inmailDraft && (
+              <div className="klen-inmail-preview">
+                <div>
+                  <div className="klen-inmail-label">Subject</div>
+                  <div className="klen-inmail-subject">{inmailDraft.subject}</div>
+                </div>
+                <div>
+                  <div className="klen-inmail-label">Body</div>
+                  <div className="klen-inmail-body">{inmailDraft.content}</div>
+                </div>
+                <button
+                  className="klen-btn klen-btn-secondary klen-copy-btn"
+                  onClick={handleCopyInmail}
+                >
+                  Copy InMail
+                </button>
+              </div>
+            )}
+
+            {icpStatus && (
+              <div className={`klen-status klen-status-${icpStatus.type}`}>
+                {icpStatus.message}
+                {typeof icpResult?.criteria_count === "number" && (
+                  <span className="klen-score-badge klen-score-high" style={{ marginLeft: 8 }}>
+                    Criteria: {icpResult.criteria_count}
                   </span>
                 )}
               </div>

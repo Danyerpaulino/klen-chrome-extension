@@ -16,7 +16,12 @@ import type {
   JobListResponse,
   LinkedInImportRequest,
   LinkedInImportResponse,
+  LinkedInICPRequest,
+  LinkedInICPResponse,
   ResolveByLinkedInResponse,
+  LinkedInInMailDraftRequest,
+  LinkedInInMailDraftResponse,
+  TenantInfo,
   LoginResponse
 } from "~/types"
 
@@ -296,6 +301,16 @@ export async function getCurrentUser(): Promise<UserInfo> {
 }
 
 /**
+ * Get tenant feature flags for the current user.
+ */
+export async function getTenantFeatureFlags(): Promise<Record<string, unknown>> {
+  const tenant = await apiFetch<TenantInfo>("/api/v1/tenants/current", {
+    cache: "no-store"
+  })
+  return tenant?.feature_flags ?? {}
+}
+
+/**
  * Logout (clear tokens)
  */
 export async function logout(): Promise<void> {
@@ -363,6 +378,38 @@ export async function resolveByLinkedIn(
   return apiFetch<ResolveByLinkedInResponse>(
     `/api/v1/jobs/${jobId}/candidates/resolve-by-linkedin?linkedin_url=${encodedUrl}`,
     { cache: "no-store" }
+  )
+}
+
+/**
+ * Draft a LinkedIn InMail for a candidate
+ */
+export async function draftLinkedInInmail(
+  jobId: string,
+  request: LinkedInInMailDraftRequest
+): Promise<LinkedInInMailDraftResponse> {
+  return apiFetch<LinkedInInMailDraftResponse>(
+    `/api/v1/jobs/${jobId}/linkedin/draft-inmail`,
+    {
+      method: "POST",
+      body: JSON.stringify(request)
+    }
+  )
+}
+
+/**
+ * Create or update an ICP from a LinkedIn profile snapshot
+ */
+export async function createIcpFromLinkedInProfile(
+  jobId: string,
+  request: LinkedInICPRequest
+): Promise<LinkedInICPResponse> {
+  return apiFetch<LinkedInICPResponse>(
+    `/api/v1/jobs/${jobId}/icp/from-linkedin-profile`,
+    {
+      method: "POST",
+      body: JSON.stringify(request)
+    }
   )
 }
 

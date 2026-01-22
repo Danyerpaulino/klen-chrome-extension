@@ -23,10 +23,11 @@ import {
 
 import {
   login as apiLogin,
-  getCurrentUser,
   listJobs,
   importLinkedInProfile,
+  createIcpFromLinkedInProfile,
   resolveByLinkedIn,
+  draftLinkedInInmail,
   ApiError
 } from "~/lib/api"
 
@@ -35,7 +36,10 @@ import type {
   MessageResponse,
   LoginPayload,
   ImportLinkedInPayload,
+  CreateLinkedInIcpPayload,
   LinkedInImportRequest,
+  DraftLinkedInInmailPayload,
+  LinkedInInMailDraftResponse,
   Job
 } from "~/types"
 
@@ -109,9 +113,17 @@ async function handleMessage(
     case "IMPORT_LINKEDIN_PROFILE":
       return handleImportLinkedInProfile(message.payload as ImportLinkedInPayload)
 
+    case "CREATE_ICP_FROM_PROFILE":
+      return handleCreateIcpFromProfile(message.payload as CreateLinkedInIcpPayload)
+
     case "RESOLVE_LINKEDIN_CANDIDATE":
       return handleResolveLinkedInCandidate(
         message.payload as { jobId: string; linkedinUrl: string }
+      )
+
+    case "DRAFT_LINKEDIN_INMAIL":
+      return handleDraftLinkedInInmail(
+        message.payload as DraftLinkedInInmailPayload
       )
 
     default:
@@ -310,12 +322,13 @@ async function handleImportLinkedInProfile(
   payload: ImportLinkedInPayload
 ): Promise<MessageResponse> {
   try {
-    const { jobId, profile, profileUrl, rawText } = payload
+    const { jobId, profile, profileUrl, rawText, forceRescore } = payload
 
     const request: LinkedInImportRequest = {
       profile_url: profileUrl,
       snapshot: profile,
       raw_text: rawText,
+      force_rescore: forceRescore,
       consent: {
         captured_at: new Date().toISOString(),
         user_initiated: true
@@ -340,6 +353,39 @@ async function handleImportLinkedInProfile(
 }
 
 /**
+ * Handle create ICP from LinkedIn profile request
+ */
+async function handleCreateIcpFromProfile(
+  payload: CreateLinkedInIcpPayload
+): Promise<MessageResponse> {
+  try {
+    const { jobId, profile, profileUrl } = payload
+
+    const request = {
+      profile_url: profileUrl,
+      snapshot: profile,
+      consent: {
+        captured_at: new Date().toISOString(),
+        user_initiated: true
+      }
+    }
+
+    const response = await createIcpFromLinkedInProfile(jobId, request)
+
+    return {
+      success: true,
+      data: response
+    }
+  } catch (error) {
+    console.error("[Klen] Create ICP error:", error)
+    return {
+      success: false,
+      error: error instanceof ApiError ? error.message : "Failed to create ICP"
+    }
+  }
+}
+
+/**
  * Handle resolve LinkedIn candidate request
  */
 async function handleResolveLinkedInCandidate(
@@ -358,6 +404,29 @@ async function handleResolveLinkedInCandidate(
     return {
       success: false,
       error: error instanceof ApiError ? error.message : "Failed to resolve candidate"
+    }
+  }
+}
+
+/**
+ * Handle draft LinkedIn InMail request
+ */
+async function handleDraftLinkedInInmail(
+  payload: DraftLinkedInInmailPayload
+): Promise<MessageResponse<LinkedInInMailDraftResponse>> {
+  try {
+    const { jobId, request } = payload
+    const response = await draftLinkedInInmail(jobId, request)
+
+    return {
+      success: true,
+      data: response
+    }
+  } catch (error) {
+    console.error("[Klen] Draft LinkedIn InMail error:", error)
+    return {
+      success: false,
+      error: error instanceof ApiError ? error.message : "Failed to draft InMail"
     }
   }
 }

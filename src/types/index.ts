@@ -43,6 +43,10 @@ export interface JobListResponse {
   stats?: Record<string, unknown>
 }
 
+export interface TenantInfo {
+  feature_flags?: Record<string, unknown>
+}
+
 // ============================================================================
 // LinkedIn Profile Types
 // ============================================================================
@@ -96,6 +100,7 @@ export interface LinkedInImportRequest {
     captured_at: string
     user_initiated: boolean
   }
+  force_rescore?: boolean
 }
 
 export interface LinkedInImportResponse {
@@ -111,6 +116,26 @@ export interface LinkedInImportResponse {
   is_duplicate: boolean
 }
 
+export interface LinkedInICPRequest {
+  profile_url: string
+  public_identifier?: string
+  snapshot: LinkedInProfileSnapshot
+  consent?: {
+    captured_at: string
+    user_initiated: boolean
+  }
+}
+
+export interface LinkedInICPResponse {
+  success: boolean
+  icp_id?: string
+  job_id?: string
+  criteria_count?: number
+  generated_from?: string
+  updated?: boolean
+  message?: string
+}
+
 export interface ResolveByLinkedInResponse {
   found: boolean
   candidate_id?: string
@@ -120,6 +145,32 @@ export interface ResolveByLinkedInResponse {
   name?: string
   stage?: string
   score?: number
+}
+
+export type LinkedInInMailTone =
+  | "professional"
+  | "friendly"
+  | "direct"
+  | "warm"
+  | "consultative"
+
+export type LinkedInInMailLength = "short" | "medium" | "long"
+
+export interface LinkedInInMailDraftRequest {
+  candidate_id?: string
+  job_candidate_id?: string
+  linkedin_url?: string
+  tone?: LinkedInInMailTone
+  length?: LinkedInInMailLength
+}
+
+export interface LinkedInInMailDraftResponse {
+  communication_id: string
+  subject: string
+  content: string
+  candidate_id: string
+  job_candidate_id?: string
+  linkedin_url?: string
 }
 
 // ============================================================================
@@ -152,7 +203,9 @@ export type MessageType =
   | "GET_JOBS"
   | "SELECT_JOB"
   | "IMPORT_LINKEDIN_PROFILE"
+  | "CREATE_ICP_FROM_PROFILE"
   | "RESOLVE_LINKEDIN_CANDIDATE"
+  | "DRAFT_LINKEDIN_INMAIL"
   | "API_REQUEST"
 
 export interface Message<T = unknown> {
@@ -187,6 +240,18 @@ export interface ImportLinkedInPayload {
   profile: LinkedInProfileSnapshot
   profileUrl: string
   rawText?: string
+  forceRescore?: boolean
+}
+
+export interface CreateLinkedInIcpPayload {
+  jobId: string
+  profile: LinkedInProfileSnapshot
+  profileUrl: string
+}
+
+export interface DraftLinkedInInmailPayload {
+  jobId: string
+  request: LinkedInInMailDraftRequest
 }
 
 // API request message types

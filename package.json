@@ -36,7 +36,8 @@
       "https://api.klen.ai/*"
     ],
     "permissions": [
-      "storage"
+      "storage",
+      "clipboardWrite"
     ]
   }
 }
