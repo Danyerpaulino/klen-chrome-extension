@@ -162,6 +162,7 @@ export interface LinkedInInMailDraftRequest {
   linkedin_url?: string
   tone?: LinkedInInMailTone
   length?: LinkedInInMailLength
+  context?: string
 }
 
 export interface LinkedInInMailDraftResponse {

@@ -37,13 +37,16 @@ export const getStyle: PlasmoGetStyle = () => {
       bottom: 20px;
       right: 20px;
       width: 320px;
-      max-height: 500px;
+      max-height: 80vh;
+      height: min(80vh, 620px);
       background: white;
       border-radius: 12px;
       box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
       z-index: 2147483647;
       overflow: hidden;
+      display: flex;
+      flex-direction: column;
     }
 
     .klen-panel-header {
@@ -79,6 +82,10 @@ export const getStyle: PlasmoGetStyle = () => {
 
     .klen-panel-body {
       padding: 16px;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
+      flex: 1 1 auto;
     }
 
     .klen-profile-preview {
@@ -217,6 +224,30 @@ export const getStyle: PlasmoGetStyle = () => {
       color: #374151;
     }
 
+    .klen-textarea {
+      width: 100%;
+      min-height: 64px;
+      padding: 8px 10px;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      font-size: 12px;
+      font-family: inherit;
+      background: white;
+      resize: vertical;
+    }
+
+    .klen-textarea:focus {
+      outline: none;
+      border-color: #6366f1;
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    }
+
+    .klen-field-hint {
+      font-size: 11px;
+      color: #6b7280;
+      text-align: right;
+    }
+
     .klen-select {
       width: 100%;
       padding: 8px 10px;
@@ -248,6 +279,28 @@ export const getStyle: PlasmoGetStyle = () => {
       color: #6b7280;
       text-transform: uppercase;
       letter-spacing: 0.04em;
+    }
+
+    .klen-inmail-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .klen-inmail-copy {
+      border: 1px solid #e5e7eb;
+      background: white;
+      color: #374151;
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 999px;
+      cursor: pointer;
+    }
+
+    .klen-inmail-copy:hover {
+      background: #f3f4f6;
     }
 
     .klen-inmail-subject {
@@ -395,6 +448,8 @@ function formatScore(value: unknown): number | null {
   return Math.round(parsed)
 }
 
+const INMAIL_CONTEXT_MAX = 500
+
 // Main content component
 function LinkedInProfilePanel() {
   const [isOpen, setIsOpen] = useState(false)
@@ -418,6 +473,7 @@ function LinkedInProfilePanel() {
   const [isInmailLoading, setIsInmailLoading] = useState(false)
   const [inmailTone, setInmailTone] = useState<LinkedInInMailTone>("professional")
   const [inmailLength, setInmailLength] = useState<LinkedInInMailLength>("short")
+  const [inmailContext, setInmailContext] = useState("")
   const [icpStatus, setIcpStatus] = useState<{
     type: "success" | "error" | "info"
     message: string
@@ -735,6 +791,11 @@ function LinkedInProfilePanel() {
     setInmailDraft(null)
 
     try {
+      const trimmedContext = inmailContext.trim()
+      const context =
+        trimmedContext.length > 0
+          ? trimmedContext.slice(0, INMAIL_CONTEXT_MAX)
+          : undefined
       const { profileUrl } = extractLinkedInProfile()
       if (!profileUrl) {
         setInmailStatus({ type: "error", message: "LinkedIn profile URL not found" })
@@ -784,7 +845,8 @@ function LinkedInProfilePanel() {
             job_candidate_id: jobCandidateId,
             linkedin_url: profileUrl,
             tone: inmailTone,
-            length: inmailLength
+            length: inmailLength,
+            context
           }
         }
       )
@@ -811,23 +873,38 @@ function LinkedInProfilePanel() {
     }
   }
 
-  const handleCopyInmail = async () => {
-    if (!inmailDraft) return
-
-    const text = `Subject: ${inmailDraft.subject}\n\n${inmailDraft.content}`
+  const copyInmailText = async (text: string, successMessage: string) => {
     try {
       if (!navigator.clipboard?.writeText) {
         throw new Error("Clipboard access unavailable")
       }
 
       await navigator.clipboard.writeText(text)
-      setInmailStatus({ type: "success", message: "InMail copied to clipboard." })
+      setInmailStatus({ type: "success", message: successMessage })
     } catch (error) {
       setInmailStatus({
         type: "error",
-        message: error instanceof Error ? error.message : "Failed to copy InMail"
+        message:
+          error instanceof Error ? error.message : "Failed to copy to clipboard"
       })
     }
+  }
+
+  const handleCopyInmail = async () => {
+    if (!inmailDraft) return
+
+    const text = `Subject: ${inmailDraft.subject}\n\n${inmailDraft.content}`
+    await copyInmailText(text, "InMail copied to clipboard.")
+  }
+
+  const handleCopyInmailSubject = async () => {
+    if (!inmailDraft) return
+    await copyInmailText(inmailDraft.subject, "Subject copied to clipboard.")
+  }
+
+  const handleCopyInmailBody = async () => {
+    if (!inmailDraft) return
+    await copyInmailText(inmailDraft.content, "InMail body copied to clipboard.")
   }
 
   const getScoreEmoji = (score?: number) => {
@@ -952,47 +1029,58 @@ function LinkedInProfilePanel() {
               >
                 {isLoading ? "Adding..." : "Add as Candidate"}
               </button>
-              <>
-                <div className="klen-field-row">
-                  <label className="klen-field-group">
-                    <span className="klen-field-label">Tone</span>
-                    <select
-                      className="klen-select"
-                      value={inmailTone}
-                      onChange={(e) =>
-                        setInmailTone(e.target.value as LinkedInInMailTone)
-                      }
-                    >
-                      <option value="professional">Professional</option>
-                      <option value="friendly">Friendly</option>
-                      <option value="direct">Direct</option>
-                      <option value="warm">Warm</option>
-                      <option value="consultative">Consultative</option>
-                    </select>
-                  </label>
-                  <label className="klen-field-group">
-                    <span className="klen-field-label">Length</span>
-                    <select
-                      className="klen-select"
-                      value={inmailLength}
-                      onChange={(e) =>
-                        setInmailLength(e.target.value as LinkedInInMailLength)
-                      }
-                    >
-                      <option value="short">Short</option>
-                      <option value="medium">Medium</option>
-                      <option value="long">Long</option>
-                    </select>
-                  </label>
-                </div>
-                <button
-                  className="klen-btn klen-btn-secondary"
-                  onClick={handleDraftInmail}
-                  disabled={isInmailLoading || !selectedJobId}
-                >
-                  {isInmailLoading ? "Drafting..." : "Draft InMail"}
-                </button>
-              </>
+              <label className="klen-field-group">
+                <span className="klen-field-label">Draft context (optional)</span>
+                <textarea
+                  className="klen-textarea"
+                  value={inmailContext}
+                  onChange={(e) => setInmailContext(e.target.value)}
+                  placeholder="Share a short note to personalize this InMail."
+                  maxLength={INMAIL_CONTEXT_MAX}
+                />
+                <span className="klen-field-hint">
+                  {inmailContext.length}/{INMAIL_CONTEXT_MAX}
+                </span>
+              </label>
+              <div className="klen-field-row">
+                <label className="klen-field-group">
+                  <span className="klen-field-label">Tone</span>
+                  <select
+                    className="klen-select"
+                    value={inmailTone}
+                    onChange={(e) =>
+                      setInmailTone(e.target.value as LinkedInInMailTone)
+                    }
+                  >
+                    <option value="professional">Professional</option>
+                    <option value="friendly">Friendly</option>
+                    <option value="direct">Direct</option>
+                    <option value="warm">Warm</option>
+                    <option value="consultative">Consultative</option>
+                  </select>
+                </label>
+                <label className="klen-field-group">
+                  <span className="klen-field-label">Length</span>
+                  <select
+                    className="klen-select"
+                    value={inmailLength}
+                    onChange={(e) =>
+                      setInmailLength(e.target.value as LinkedInInMailLength)
+                    }
+                  >
+                    <option value="short">Short</option>
+                    <option value="medium">Medium</option>
+                    <option value="long">Long</option>
+                  </select>
+                </label>
+              </div>
+              <button
+                className="klen-btn klen-btn-secondary"
+                onClick={handleDraftInmail}
+                disabled={isInmailLoading || !selectedJobId}
+              >
+                {isInmailLoading ? "Drafting..." : "Draft InMail"}
+              </button>
               <button
                 className="klen-btn klen-btn-secondary"
                 onClick={handleCreateIcp}
@@ -1035,11 +1123,21 @@ function LinkedInProfilePanel() {
             {inmailDraft && (
               <div className="klen-inmail-preview">
                 <div>
-                  <div className="klen-inmail-label">Subject</div>
+                  <div className="klen-inmail-row">
+                    <div className="klen-inmail-label">Subject</div>
+                    <button className="klen-inmail-copy" onClick={handleCopyInmailSubject}>
+                      Copy
+                    </button>
+                  </div>
                   <div className="klen-inmail-subject">{inmailDraft.subject}</div>
                 </div>
                 <div>
-                  <div className="klen-inmail-label">Body</div>
+                  <div className="klen-inmail-row">
+                    <div className="klen-inmail-label">Body</div>
+                    <button className="klen-inmail-copy" onClick={handleCopyInmailBody}>
+                      Copy
+                    </button>
+                  </div>
                   <div className="klen-inmail-body">{inmailDraft.content}</div>
                 </div>
                 <button
