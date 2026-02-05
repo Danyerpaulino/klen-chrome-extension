@@ -18,6 +18,8 @@ import {
   setSelectedJobId,
   getApiBaseUrl,
   setApiBaseUrl,
+  getOutreachMode,
+  setOutreachMode,
   isAuthenticated
 } from "~/lib/storage"
 
@@ -28,6 +30,7 @@ import {
   createIcpFromLinkedInProfile,
   resolveByLinkedIn,
   draftLinkedInInmail,
+  getClusterOutreachContext,
   ApiError
 } from "~/lib/api"
 
@@ -40,6 +43,9 @@ import type {
   LinkedInImportRequest,
   DraftLinkedInInmailPayload,
   LinkedInInMailDraftResponse,
+  SetOutreachModePayload,
+  ClusterContextPayload,
+  ClusterOutreachContext,
   Job
 } from "~/types"
 
@@ -110,6 +116,9 @@ async function handleMessage(
     case "SELECT_JOB":
       return handleSelectJob(message.payload as { jobId: string })
 
+    case "SET_OUTREACH_MODE":
+      return handleSetOutreachMode(message.payload as SetOutreachModePayload)
+
     case "IMPORT_LINKEDIN_PROFILE":
       return handleImportLinkedInProfile(message.payload as ImportLinkedInPayload)
 
@@ -125,6 +134,9 @@ async function handleMessage(
       return handleDraftLinkedInInmail(
         message.payload as DraftLinkedInInmailPayload
       )
+
+    case "GET_CLUSTER_CONTEXT":
+      return handleGetClusterContext(message.payload as ClusterContextPayload)
 
     default:
       return {
@@ -244,6 +256,7 @@ async function handleGetAuthStatus(): Promise<MessageResponse> {
     const user = authenticated ? await getUserInfo() : null
     const selectedJobId = await getSelectedJobId()
     const apiBaseUrl = await getApiBaseUrl()
+    const outreachMode = await getOutreachMode()
 
     return {
       success: true,
@@ -251,7 +264,8 @@ async function handleGetAuthStatus(): Promise<MessageResponse> {
         isAuthenticated: authenticated,
         user,
         selectedJobId,
-        apiBaseUrl
+        apiBaseUrl,
+        outreachMode
       }
     }
   } catch (error) {
@@ -316,6 +330,25 @@ async function handleSelectJob(
 }
 
 /**
+ * Handle outreach mode update
+ */
+async function handleSetOutreachMode(
+  payload: SetOutreachModePayload
+): Promise<MessageResponse> {
+  try {
+    await setOutreachMode(payload.outreachMode)
+    console.log("[Klen] Outreach mode updated:", payload.outreachMode)
+    return { success: true }
+  } catch (error) {
+    console.error("[Klen] Outreach mode error:", error)
+    return {
+      success: false,
+      error: "Failed to update outreach mode"
+    }
+  }
+}
+
+/**
  * Handle import LinkedIn profile request
  */
 async function handleImportLinkedInProfile(
@@ -348,6 +381,28 @@ async function handleImportLinkedInProfile(
     return {
       success: false,
       error: error instanceof ApiError ? error.message : "Failed to import profile"
+    }
+  }
+}
+
+/**
+ * Handle cluster outreach context request
+ */
+async function handleGetClusterContext(
+  payload: ClusterContextPayload
+): Promise<MessageResponse<ClusterOutreachContext>> {
+  try {
+    const response = await getClusterOutreachContext(payload.jobId)
+    return {
+      success: true,
+      data: response
+    }
+  } catch (error) {
+    console.error("[Klen] Cluster context error:", error)
+    return {
+      success: false,
+      error:
+        error instanceof ApiError ? error.message : "Failed to load cluster context"
     }
   }
 }

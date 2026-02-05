@@ -9,7 +9,12 @@
  */
 
 import { useEffect, useState, useCallback } from "react"
-import type { Job, UserInfo, MessageResponse } from "~/types"
+import type {
+  Job,
+  UserInfo,
+  MessageResponse,
+  LinkedInInMailOutreachMode
+} from "~/types"
 import { isDevMode } from "~/lib/storage"
 import "./popup.css"
 
@@ -61,6 +66,9 @@ function Popup() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [view, setView] = useState<"main" | "settings">("main")
+  const [outreachMode, setOutreachMode] =
+    useState<LinkedInInMailOutreachMode>("employer_centric")
+  const [settingsMessage, setSettingsMessage] = useState<string | null>(null)
 
   // Check auth status on mount
   useEffect(() => {
@@ -75,6 +83,7 @@ function Popup() {
         user?: UserInfo
         selectedJobId?: string
         apiBaseUrl?: string
+        outreachMode?: LinkedInInMailOutreachMode
       }>("GET_AUTH_STATUS")
 
       if (response.success && response.data) {
@@ -85,6 +94,9 @@ function Popup() {
         }
         if (response.data.apiBaseUrl) {
           setApiUrl(response.data.apiBaseUrl)
+        }
+        if (response.data.outreachMode) {
+          setOutreachMode(response.data.outreachMode)
         }
 
         // Load jobs if authenticated
@@ -156,6 +168,22 @@ function Popup() {
   const handleJobSearch = async (search: string) => {
     setJobSearch(search)
     await loadJobs(search)
+  }
+
+  const handleOutreachModeToggle = async (enabled: boolean) => {
+    const nextMode: LinkedInInMailOutreachMode = enabled
+      ? "candidate_centric"
+      : "employer_centric"
+    setOutreachMode(nextMode)
+    setSettingsMessage(null)
+
+    const response = await sendMessage("SET_OUTREACH_MODE", {
+      outreachMode: nextMode
+    })
+
+    if (!response.success) {
+      setSettingsMessage(response.error || "Failed to update outreach mode.")
+    }
   }
 
   // Render login form
@@ -394,6 +422,30 @@ function Popup() {
         >
           Sign Out
         </button>
+      </div>
+
+      <div className="settings-section">
+        <h3>Outreach</h3>
+        <div className="settings-item settings-toggle">
+          <div className="settings-copy">
+            <span>Candidate outreach mode</span>
+            <span className="settings-hint">
+              Use candidate-centric value messaging for LinkedIn drafts.
+            </span>
+          </div>
+          <label className="switch">
+            <input
+              type="checkbox"
+              checked={outreachMode === "candidate_centric"}
+              onChange={(e) => handleOutreachModeToggle(e.target.checked)}
+            />
+            <span className="slider" />
+          </label>
+        </div>
+        <div className="settings-hint">
+          Requires Clusters portal access for candidate-centric drafts.
+        </div>
+        {settingsMessage && <div className="settings-message">{settingsMessage}</div>}
       </div>
 
       <div className="settings-section">

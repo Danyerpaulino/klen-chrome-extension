@@ -21,6 +21,7 @@ import type {
   ResolveByLinkedInResponse,
   LinkedInInMailDraftRequest,
   LinkedInInMailDraftResponse,
+  ClusterOutreachContext,
   TenantInfo,
   LoginResponse
 } from "~/types"
@@ -394,6 +395,18 @@ export async function draftLinkedInInmail(
       method: "POST",
       body: JSON.stringify(request)
     }
+  )
+}
+
+/**
+ * Get cluster outreach context for a job.
+ */
+export async function getClusterOutreachContext(
+  jobId: string
+): Promise<ClusterOutreachContext> {
+  return apiFetch<ClusterOutreachContext>(
+    `/api/v1/clusters/jobs/${jobId}/outreach-context`,
+    { cache: "no-store" }
   )
 }
 

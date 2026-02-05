@@ -4,7 +4,12 @@
  */
 
 import { Storage } from "@plasmohq/storage"
-import type { AuthTokens, UserInfo, StorageData } from "~/types"
+import type {
+  AuthTokens,
+  UserInfo,
+  StorageData,
+  LinkedInInMailOutreachMode
+} from "~/types"
 
 // API base URL from environment (set at build time)
 // In development: http://localhost:8000
@@ -19,7 +24,8 @@ const STORAGE_KEYS = {
   AUTH: "klen_auth",
   USER: "klen_user",
   SELECTED_JOB: "klen_selected_job",
-  API_BASE_URL: "klen_api_base_url"
+  API_BASE_URL: "klen_api_base_url",
+  OUTREACH_MODE: "klen_outreach_mode"
 } as const
 
 // Create storage instance
@@ -111,6 +117,35 @@ export async function getSelectedJobId(): Promise<string | null> {
 }
 
 /**
+ * Get outreach mode preference
+ */
+export async function getOutreachMode(): Promise<LinkedInInMailOutreachMode> {
+  try {
+    const mode = await storage.get<LinkedInInMailOutreachMode>(
+      STORAGE_KEYS.OUTREACH_MODE
+    )
+    return mode === "candidate_centric" ? "candidate_centric" : "employer_centric"
+  } catch (error) {
+    console.error("[Klen] Error getting outreach mode:", error)
+    return "employer_centric"
+  }
+}
+
+/**
+ * Save outreach mode preference
+ */
+export async function setOutreachMode(
+  mode: LinkedInInMailOutreachMode
+): Promise<void> {
+  try {
+    await storage.set(STORAGE_KEYS.OUTREACH_MODE, mode)
+  } catch (error) {
+    console.error("[Klen] Error saving outreach mode:", error)
+    throw error
+  }
+}
+
+/**
  * Save selected job ID to storage
  */
 export async function setSelectedJobId(jobId: string): Promise<void> {
@@ -174,18 +209,20 @@ export async function setApiBaseUrl(url: string): Promise<void> {
  * Get all storage data
  */
 export async function getAllStorageData(): Promise<StorageData> {
-  const [auth, user, selectedJobId, apiBaseUrl] = await Promise.all([
+  const [auth, user, selectedJobId, apiBaseUrl, outreachMode] = await Promise.all([
     getAuthTokens(),
     getUserInfo(),
     getSelectedJobId(),
-    getApiBaseUrl()
+    getApiBaseUrl(),
+    getOutreachMode()
   ])
 
   return {
     auth: auth || undefined,
     user: user || undefined,
     selectedJobId: selectedJobId || undefined,
-    apiBaseUrl
+    apiBaseUrl,
+    outreachMode
   }
 }
 

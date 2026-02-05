@@ -156,6 +156,8 @@ export type LinkedInInMailTone =
 
 export type LinkedInInMailLength = "short" | "medium" | "long"
 
+export type LinkedInInMailOutreachMode = "employer_centric" | "candidate_centric"
+
 export interface LinkedInInMailDraftRequest {
   candidate_id?: string
   job_candidate_id?: string
@@ -163,6 +165,7 @@ export interface LinkedInInMailDraftRequest {
   tone?: LinkedInInMailTone
   length?: LinkedInInMailLength
   context?: string
+  outreach_mode?: LinkedInInMailOutreachMode
 }
 
 export interface LinkedInInMailDraftResponse {
@@ -172,6 +175,17 @@ export interface LinkedInInMailDraftResponse {
   candidate_id: string
   job_candidate_id?: string
   linkedin_url?: string
+}
+
+export interface ClusterOutreachContext {
+  cluster_id: string
+  job_id: string
+  market_demand_count: number
+  salary_range_min?: number
+  salary_range_max?: number
+  salary_currency?: string
+  job_title_keywords?: string[]
+  top_skills?: string[]
 }
 
 // ============================================================================
@@ -190,6 +204,7 @@ export interface StorageData {
   user?: UserInfo
   selectedJobId?: string
   apiBaseUrl?: string
+  outreachMode?: LinkedInInMailOutreachMode
 }
 
 // ============================================================================
@@ -203,10 +218,12 @@ export type MessageType =
   | "OPEN_POPUP"
   | "GET_JOBS"
   | "SELECT_JOB"
+  | "SET_OUTREACH_MODE"
   | "IMPORT_LINKEDIN_PROFILE"
   | "CREATE_ICP_FROM_PROFILE"
   | "RESOLVE_LINKEDIN_CANDIDATE"
   | "DRAFT_LINKEDIN_INMAIL"
+  | "GET_CLUSTER_CONTEXT"
   | "API_REQUEST"
 
 export interface Message<T = unknown> {
@@ -253,6 +270,14 @@ export interface CreateLinkedInIcpPayload {
 export interface DraftLinkedInInmailPayload {
   jobId: string
   request: LinkedInInMailDraftRequest
+}
+
+export interface SetOutreachModePayload {
+  outreachMode: LinkedInInMailOutreachMode
+}
+
+export interface ClusterContextPayload {
+  jobId: string
 }
 
 // API request message types

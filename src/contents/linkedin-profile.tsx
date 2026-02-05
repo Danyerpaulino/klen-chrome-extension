@@ -13,10 +13,12 @@ import {
 } from "~/lib/linkedin-extractor"
 import type {
   Job,
+  ClusterOutreachContext,
   LinkedInICPResponse,
   LinkedInImportResponse,
   LinkedInInMailDraftResponse,
   LinkedInInMailLength,
+  LinkedInInMailOutreachMode,
   LinkedInInMailTone,
   MessageResponse,
   ResolveByLinkedInResponse
@@ -263,6 +265,96 @@ export const getStyle: PlasmoGetStyle = () => {
       box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
     }
 
+    .klen-outreach-card {
+      padding: 10px 12px;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      background: #f9fafb;
+      display: grid;
+      gap: 8px;
+    }
+
+    .klen-outreach-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .klen-outreach-header .klen-inmail-copy {
+      margin-left: auto;
+    }
+
+    .klen-mode-badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 999px;
+    }
+
+    .klen-mode-candidate {
+      background: #e0f2fe;
+      color: #0369a1;
+    }
+
+    .klen-mode-employer {
+      background: #f3f4f6;
+      color: #6b7280;
+    }
+
+    .klen-outreach-preview {
+      display: grid;
+      gap: 8px;
+    }
+
+    .klen-outreach-list {
+      display: grid;
+      gap: 4px;
+    }
+
+    .klen-outreach-item {
+      font-size: 11px;
+      color: #374151;
+    }
+
+    .klen-outreach-stats {
+      display: grid;
+      gap: 6px;
+      border-top: 1px dashed #e5e7eb;
+      padding-top: 8px;
+    }
+
+    .klen-outreach-stat {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 11px;
+      color: #4b5563;
+    }
+
+    .klen-outreach-stat-label {
+      font-weight: 600;
+      color: #6b7280;
+    }
+
+    .klen-outreach-stat-value {
+      color: #111827;
+      text-align: right;
+    }
+
+    .klen-outreach-snapshot {
+      font-size: 11px;
+      color: #4b5563;
+      background: #ffffff;
+      border: 1px dashed #e5e7eb;
+      padding: 6px 8px;
+      border-radius: 8px;
+    }
+
+    .klen-outreach-hint {
+      font-size: 11px;
+      color: #6b7280;
+    }
+
     .klen-inmail-preview {
       margin-top: 10px;
       padding: 10px 12px;
@@ -448,7 +540,71 @@ function formatScore(value: unknown): number | null {
   return Math.round(parsed)
 }
 
+function formatCurrencyValue(value: unknown, currency?: string): string | null {
+  const amount = coerceFiniteNumber(value)
+  if (amount === null) return null
+
+  const safeCurrency =
+    typeof currency === "string" && currency.trim() ? currency.trim() : "USD"
+
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: safeCurrency,
+      maximumFractionDigits: 0
+    }).format(amount)
+  } catch {
+    return `$${Math.round(amount)}`
+  }
+}
+
+function formatCurrencyRange(
+  minValue: unknown,
+  maxValue: unknown,
+  currency?: string
+): string | null {
+  const minFormatted = formatCurrencyValue(minValue, currency)
+  const maxFormatted = formatCurrencyValue(maxValue, currency)
+
+  if (minFormatted && maxFormatted) {
+    return `${minFormatted} - ${maxFormatted}`
+  }
+  return minFormatted || maxFormatted
+}
+
+function buildMarketSnapshot(context: ClusterOutreachContext | null): string | null {
+  if (!context) return null
+
+  const parts: string[] = []
+  if (context.market_demand_count > 0) {
+    parts.push(`${context.market_demand_count} companies actively hiring`)
+  }
+
+  const salaryRange = formatCurrencyRange(
+    context.salary_range_min,
+    context.salary_range_max,
+    context.salary_currency
+  )
+  if (salaryRange) {
+    parts.push(`Salary range ${salaryRange}`)
+  }
+
+  if (Array.isArray(context.top_skills) && context.top_skills.length > 0) {
+    parts.push(`Top skills: ${context.top_skills.slice(0, 6).join(", ")}`)
+  }
+
+  if (parts.length === 0) return null
+  return `Market snapshot: ${parts.join(" | ")}`
+}
+
 const INMAIL_CONTEXT_MAX = 500
+const OUTREACH_VALUE_PROPS = [
+  "Free salary benchmark for their role and market",
+  "AI resume analysis with improvement tips",
+  "Professional 60-second highlight reel they can use anywhere",
+  "Representation to active employers with no commitment",
+  "We only get paid when they get hired"
+]
 
 // Main content component
 function LinkedInProfilePanel() {
@@ -474,12 +630,22 @@ function LinkedInProfilePanel() {
   const [inmailTone, setInmailTone] = useState<LinkedInInMailTone>("professional")
   const [inmailLength, setInmailLength] = useState<LinkedInInMailLength>("short")
   const [inmailContext, setInmailContext] = useState("")
+  const [outreachMode, setOutreachMode] =
+    useState<LinkedInInMailOutreachMode>("employer_centric")
   const [icpStatus, setIcpStatus] = useState<{
     type: "success" | "error" | "info"
     message: string
   } | null>(null)
   const [icpResult, setIcpResult] = useState<LinkedInICPResponse | null>(null)
   const [isIcpLoading, setIsIcpLoading] = useState(false)
+  const [clusterContext, setClusterContext] = useState<ClusterOutreachContext | null>(
+    null
+  )
+  const [clusterStatus, setClusterStatus] = useState<{
+    type: "success" | "error" | "info"
+    message: string
+  } | null>(null)
+  const [isClusterLoading, setIsClusterLoading] = useState(false)
   const importAttemptRef = useRef(0)
 
   // Profile data from extraction
@@ -500,10 +666,12 @@ function LinkedInProfilePanel() {
     const response = await sendMessage<{
       isAuthenticated: boolean
       selectedJobId?: string
+      outreachMode?: LinkedInInMailOutreachMode
     }>("GET_AUTH_STATUS")
 
     if (response.success && response.data) {
       setIsAuthenticated(response.data.isAuthenticated)
+      setOutreachMode(response.data.outreachMode || "employer_centric")
 
       if (response.data.selectedJobId) {
         setSelectedJobId(response.data.selectedJobId)
@@ -521,6 +689,36 @@ function LinkedInProfilePanel() {
     }
   }, [loadJobs])
 
+  const loadClusterContext = useCallback(async (jobId: string) => {
+    if (!jobId) return
+
+    setIsClusterLoading(true)
+    setClusterStatus(null)
+    try {
+      const response = await sendMessage<ClusterOutreachContext>(
+        "GET_CLUSTER_CONTEXT",
+        { jobId }
+      )
+      if (response.success && response.data) {
+        setClusterContext(response.data)
+      } else {
+        setClusterContext(null)
+        setClusterStatus({
+          type: "info",
+          message: response.error || "Cluster context unavailable for this job."
+        })
+      }
+    } catch (error) {
+      setClusterContext(null)
+      setClusterStatus({
+        type: "error",
+        message: error instanceof Error ? error.message : "Failed to load cluster context"
+      })
+    } finally {
+      setIsClusterLoading(false)
+    }
+  }, [])
+
   // Check auth status on mount
   useEffect(() => {
     checkAuthStatus()
@@ -532,6 +730,18 @@ function LinkedInProfilePanel() {
       checkAuthStatus()
     }
   }, [isOpen, checkAuthStatus])
+
+  useEffect(() => {
+    if (!isOpen || !isAuthenticated) return
+
+    if (!selectedJobId || outreachMode !== "candidate_centric") {
+      setClusterContext(null)
+      setClusterStatus(null)
+      return
+    }
+
+    void loadClusterContext(selectedJobId)
+  }, [isOpen, isAuthenticated, selectedJobId, outreachMode, loadClusterContext])
 
   // Extract profile when panel opens
   useEffect(() => {
@@ -572,6 +782,8 @@ function LinkedInProfilePanel() {
     setSelectedJobId(jobId)
     setInmailStatus(null)
     setInmailDraft(null)
+    setClusterContext(null)
+    setClusterStatus(null)
     await sendMessage("SELECT_JOB", { jobId })
   }
 
@@ -792,9 +1004,15 @@ function LinkedInProfilePanel() {
 
     try {
       const trimmedContext = inmailContext.trim()
+      const marketSnapshot =
+        outreachMode === "candidate_centric"
+          ? buildMarketSnapshot(clusterContext)
+          : null
+      const contextParts = [trimmedContext, marketSnapshot].filter(Boolean) as string[]
+      const mergedContext = contextParts.join("\n")
       const context =
-        trimmedContext.length > 0
-          ? trimmedContext.slice(0, INMAIL_CONTEXT_MAX)
+        mergedContext.length > 0
+          ? mergedContext.slice(0, INMAIL_CONTEXT_MAX)
           : undefined
       const { profileUrl } = extractLinkedInProfile()
       if (!profileUrl) {
@@ -846,7 +1064,8 @@ function LinkedInProfilePanel() {
             linkedin_url: profileUrl,
             tone: inmailTone,
             length: inmailLength,
-            context
+            context,
+            outreach_mode: outreachMode
           }
         }
       )
@@ -923,6 +1142,21 @@ function LinkedInProfilePanel() {
       displayScore !== null &&
       importResult?.job_id === selectedJobId
   )
+  const marketSnapshot =
+    outreachMode === "candidate_centric" ? buildMarketSnapshot(clusterContext) : null
+  const demandCount = clusterContext?.market_demand_count || 0
+  const demandDisplay =
+    demandCount > 0 ? new Intl.NumberFormat("en-US").format(demandCount) : "n/a"
+  const salaryRange = clusterContext
+    ? formatCurrencyRange(
+        clusterContext.salary_range_min,
+        clusterContext.salary_range_max,
+        clusterContext.salary_currency
+      )
+    : null
+  const topSkills = Array.isArray(clusterContext?.top_skills)
+    ? clusterContext?.top_skills.slice(0, 6)
+    : []
 
   // Render toggle button when panel is closed
   if (!isOpen) {
@@ -1073,6 +1307,78 @@ function LinkedInProfilePanel() {
                     <option value="long">Long</option>
                   </select>
                 </label>
+              </div>
+              <div className="klen-outreach-card">
+                <div className="klen-outreach-header">
+                  <span className="klen-field-label">Outreach mode</span>
+                  <span
+                    className={`klen-mode-badge ${
+                      outreachMode === "candidate_centric"
+                        ? "klen-mode-candidate"
+                        : "klen-mode-employer"
+                    }`}
+                  >
+                    {outreachMode === "candidate_centric"
+                      ? "Candidate-centric"
+                      : "Employer-centric"}
+                  </span>
+                  <button
+                    className="klen-inmail-copy"
+                    onClick={openPopup}
+                    type="button"
+                  >
+                    Settings
+                  </button>
+                </div>
+                {outreachMode === "candidate_centric" ? (
+                  <div className="klen-outreach-preview">
+                    <div className="klen-inmail-label">Value prop preview</div>
+                    <div className="klen-outreach-list">
+                      {OUTREACH_VALUE_PROPS.map((item) => (
+                        <div key={item} className="klen-outreach-item">
+                          {item}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="klen-outreach-stats">
+                      <div className="klen-outreach-stat">
+                        <span className="klen-outreach-stat-label">Market demand</span>
+                        <span className="klen-outreach-stat-value">
+                          {demandDisplay} companies
+                        </span>
+                      </div>
+                      <div className="klen-outreach-stat">
+                        <span className="klen-outreach-stat-label">Salary range</span>
+                        <span className="klen-outreach-stat-value">
+                          {salaryRange || "n/a"}
+                        </span>
+                      </div>
+                      {topSkills.length > 0 && (
+                        <div className="klen-outreach-stat">
+                          <span className="klen-outreach-stat-label">Top skills</span>
+                          <span className="klen-outreach-stat-value">
+                            {topSkills.join(", ")}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    {marketSnapshot && (
+                      <div className="klen-outreach-snapshot">
+                        {marketSnapshot}
+                      </div>
+                    )}
+                    {isClusterLoading && (
+                      <div className="klen-outreach-hint">Loading market stats...</div>
+                    )}
+                    {clusterStatus && (
+                      <div className="klen-outreach-hint">{clusterStatus.message}</div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="klen-outreach-hint">
+                    Enable candidate outreach to unlock value-prop messaging.
+                  </div>
+                )}
               </div>
               <button
                 className="klen-btn klen-btn-secondary"
