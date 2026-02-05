@@ -7,7 +7,7 @@ dist/
 .plasmo/
 
 # Environment
-.env*
+.env.*
 .env.local
 .env.*.local
 
